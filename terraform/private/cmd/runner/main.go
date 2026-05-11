@@ -74,6 +74,12 @@ func run() error {
 		return fmt.Errorf("work-tree cwd %s: %w", cwd, err)
 	}
 
+	// TF_IN_AUTOMATION=1 suppresses interactive-style usage hints in
+	// tofu's output (e.g. "Run `terraform plan` to ..." lines that
+	// wouldn't apply in our wrapped invocation).
+	// TF_INPUT=0 disables every prompt — variable prompts, confirmation
+	// prompts, init's "ask about backend changes" — so the process
+	// never blocks waiting for stdin.
 	env := append(os.Environ(),
 		"TF_IN_AUTOMATION=1",
 		"TF_INPUT=0",
