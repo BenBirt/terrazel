@@ -1,0 +1,23 @@
+"""terrazel: Bazel rules for managing OpenTofu/Terraform configuration.
+
+Downstream usage:
+
+    bazel_dep(name = "terrazel", version = "0.1.0")
+    tofu = use_extension("@terrazel//toolchain:extensions.bzl", "tofu")
+    # tofu.version(version = "1.8.5")  # optional override
+    use_repo(tofu, "tofu_toolchains")
+"""
+
+module(
+    name = "terrazel",
+    version = "0.1.0",
+    compatibility_level = 1,
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "platforms", version = "0.0.10")
+
+tofu = use_extension("//toolchain:extensions.bzl", "tofu")
+use_repo(tofu, "tofu_toolchains")
+
+register_toolchains("@tofu_toolchains//:all")
