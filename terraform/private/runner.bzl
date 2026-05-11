@@ -34,15 +34,22 @@ def _tf_runner_impl(ctx):
     tofu_rel = _runfiles_path(workspace_name, tofu.binary)
     work_tree_rel = _runfiles_path(workspace_name, deploy.work_tree)
 
-    # The work tree root is the dirname of the first materialized file
-    # walked up to the `<name>.work/` segment. Computing that in shell
-    # is fragile; instead we bake the work-tree root path directly.
-    # The deploy rule materializes outputs at
-    # `bazel-bin/<pkg>/<name>.work/<workspace-relative-path>`, so the
-    # runfiles path of any of them starts with
-    # `<workspace>/<pkg>/<name>.work/`. We compute that root here.
+    # The work tree root in runfiles is `<workspace>/<pkg>/<name>.work`,
+    # because the deploy's outputs are declared at
+    # `<pkg>/<name>.work/<workspace-relative-path>`.
     work_tree_root = "{ws}/{pkg}/{name}.work".format(
         ws = workspace_name,
+        pkg = ctx.attr.deploy.label.package,
+        name = ctx.attr.deploy.label.name,
+    )
+
+    # State lives at the deploy's `$(RULEDIR)/<name>.terrazel-state` —
+    # i.e. `bazel-out/<config>/bin/<pkg>/<name>.terrazel-state`. That
+    # path is already covered by the standard `bazel-*` gitignore and is
+    # wiped by `bazel clean`. Bake the relative path here; the launcher
+    # joins it with `$BUILD_WORKSPACE_DIRECTORY` at runtime.
+    state_dir_rel = "{bin}/{pkg}/{name}.terrazel-state".format(
+        bin = ctx.bin_dir.path,
         pkg = ctx.attr.deploy.label.package,
         name = ctx.attr.deploy.label.name,
     )
@@ -60,15 +67,14 @@ exec "$R/{runner}" \\
     --tofu="$R/{tofu}" \\
     --work-tree="$R/{work_tree}" \\
     --package-dir="{pkg}" \\
-    --state-id="{state_id}" \\
-    --command="{command}" \\
-    "$@"
+    --state-dir="${{BUILD_WORKSPACE_DIRECTORY:?must be invoked via 'bazel run'}}/{state_dir_rel}" \\
+    --command="{command}"
 """.format(
             runner = runner_rel,
             tofu = tofu_rel,
             work_tree = work_tree_root,
             pkg = deploy.package_dir,
-            state_id = deploy.state_id,
+            state_dir_rel = state_dir_rel,
             command = ctx.attr.command,
         ),
     )

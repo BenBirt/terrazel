@@ -57,34 +57,21 @@ bazel run //path/to:prod.apply
 ## How it works
 
 At analysis time `terraform_deploy` materializes every transitive `.tf`
-file into a directory tree under
-`bazel-bin/<pkg>/<name>.work/` via `ctx.actions.symlink`, preserving each
-file's workspace-relative path. It also writes
-`<name>.work/<pkg>/terrazel.auto.tfvars.json` from `vars = {...}`.
+file into a directory tree under `bazel-bin/<pkg>/<name>.work/` via
+`ctx.actions.symlink`, preserving each file's workspace-relative path.
+It also writes `<name>.work/<pkg>/terrazel.auto.tfvars.json` from
+`vars = {...}`.
 
-At runtime, the generated launcher script (a ten-line bash wrapper)
-exec's a small Go binary with explicit flags pointing at:
+At runtime the launcher invokes a small Go binary that cd's into the
+materialized work tree, runs `tofu init -input=false`, then runs
+`tofu plan` (saving `tfplan`) or `tofu apply` (which re-plans first so
+it never applies a stale plan).
 
-- the resolved `tofu` binary from the toolchain;
-- the materialized work-tree root;
-- the package directory to `cd` into;
-- a stable per-target state-id.
-
-The Go runner then:
-
-1. Verifies it was invoked under `bazel run` (`BUILD_WORKSPACE_DIRECTORY`).
-2. Creates `bazel-out/terrazel/<state-id>/` and a sibling
-   `bazel-out/terrazel/plugin-cache/` (reused across targets to avoid
-   re-downloading providers on every run).
-3. Takes a `flock` on a per-target lock file.
-4. Runs `tofu init -input=false`.
-5. For `plan`: writes `tfplan` to the state dir and stops.
-   For `apply`: re-plans, then applies the freshly captured `tfplan`
-   (so apply never operates on a stale plan).
-6. If no `backend "..." {}` block is detected in the deploy's `.tf`
-   files, the runner passes `-state=` / `-state-out=` pointing into the
-   per-target state dir; otherwise it lets the configured backend own
-   state.
+State is persisted per-deploy at the deploy target's `$(RULEDIR)`, i.e.
+`bazel-bin/<package>/<name>.terrazel-state/` (already covered by the
+standard `bazel-*` gitignore and wiped by `bazel clean`). If the
+deploy declares a `backend "..." {}` block in any of its `.tf` files,
+the runner defers to that backend and skips the local-state flags.
 
 ## Module source paths
 
@@ -127,8 +114,5 @@ module "dns" {
 - Additional sub-commands: `.destroy`, `.validate`, `.fmt`, `.import`,
   `.console`.
 - Hermetic provider plugin vendoring via `-plugin-dir`.
-- Treat `.terraform.lock.hcl` as a first-class input (currently we set
-  `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=1`).
+- Treat `.terraform.lock.hcl` as a first-class input.
 - Windows host support (downloads work; launcher script is bash-only).
-- Switch from `go_sdk.host()` to a pinned `go_sdk.download(...)` once
-  release downloads are reachable from our build environment.

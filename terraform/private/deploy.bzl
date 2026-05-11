@@ -19,11 +19,6 @@ load(":runner.bzl", _tf_runner = "tf_runner")
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
-def _state_id(label):
-    """Stable, filesystem-safe namespace key for a deploy target."""
-    pkg = label.package.replace("/", "_") or "ROOT"
-    return "{}_{}".format(pkg, label.name)
-
 def _materialize(ctx, entries, tfvars_content):
     """Materialize the work tree under `<pkg>/<name>.work/`.
 
@@ -100,7 +95,6 @@ def _terraform_deploy_impl(ctx):
             work_tree = outputs[0],
             work_tree_files = work_tree_files,
             package_dir = ctx.label.package,
-            state_id = _state_id(ctx.label),
         ),
     ]
 

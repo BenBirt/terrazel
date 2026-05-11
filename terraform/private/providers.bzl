@@ -28,6 +28,5 @@ TerraformDeployInfo = provider(
         "work_tree": "File: the materialized work tree root (a directory of symlinks + generated tfvars).",
         "work_tree_files": "depset[File]: every file inside the work tree (so runfiles include them).",
         "package_dir": "string: workspace-relative directory the runner cd's into before running tofu.",
-        "state_id": "string: stable identifier used to namespace state under bazel-out/terrazel/.",
     },
 )
