@@ -7,11 +7,12 @@ Terraform-compatible) configuration as first-class build targets.
 [rules_k8s](https://github.com/bazelbuild/rules_k8s):
 
 - `terraform_library` — a reusable bundle of `.tf` files plus its transitive
-  `terraform_library` deps. Analogous to `cc_library`. Not directly runnable.
-- `terraform_deploy` — a *root* invocation that binds variable values to one
-  or more `terraform_library` targets. The macro automatically generates two
-  runnable sub-targets: `:foo.plan` and `:foo.apply`. Analogous to
-  `cc_binary`.
+  `terraform_library` deps. Analogous to `cc_library`. Not directly runnable
+  and carries no variable values.
+- `terraform_deploy` — a *root* invocation that binds variable values to
+  one or more `terraform_library` targets. The macro automatically
+  generates two runnable sub-targets: `:foo.plan` and `:foo.apply`.
+  Analogous to `cc_binary`.
 
 ## Quick start
 
@@ -53,13 +54,44 @@ bazel run //path/to:prod.plan
 bazel run //path/to:prod.apply
 ```
 
-## File layout at runtime
+## How it works
 
-Each input `.tf` file is materialized into a scratch working tree at its
-**workspace-relative path**. Same-package files reference each other bare;
-sibling-package deps reference each other via relative paths. For example,
-to depend on a library at `//infra/dns:dns` from a config at
-`//infra/networking:network`, write:
+At analysis time `terraform_deploy` materializes every transitive `.tf`
+file into a directory tree under
+`bazel-bin/<pkg>/<name>.work/` via `ctx.actions.symlink`, preserving each
+file's workspace-relative path. It also writes
+`<name>.work/<pkg>/terrazel.auto.tfvars.json` from `vars = {...}`.
+
+At runtime, the generated launcher script (a ten-line bash wrapper)
+exec's a small Go binary with explicit flags pointing at:
+
+- the resolved `tofu` binary from the toolchain;
+- the materialized work-tree root;
+- the package directory to `cd` into;
+- a stable per-target state-id.
+
+The Go runner then:
+
+1. Verifies it was invoked under `bazel run` (`BUILD_WORKSPACE_DIRECTORY`).
+2. Creates `bazel-out/terrazel/<state-id>/` and a sibling
+   `bazel-out/terrazel/plugin-cache/` (reused across targets to avoid
+   re-downloading providers on every run).
+3. Takes a `flock` on a per-target lock file.
+4. Runs `tofu init -input=false`.
+5. For `plan`: writes `tfplan` to the state dir and stops.
+   For `apply`: re-plans, then applies the freshly captured `tfplan`
+   (so apply never operates on a stale plan).
+6. If no `backend "..." {}` block is detected in the deploy's `.tf`
+   files, the runner passes `-state=` / `-state-out=` pointing into the
+   per-target state dir; otherwise it lets the configured backend own
+   state.
+
+## Module source paths
+
+Each `.tf` is materialized at its workspace-relative path, so:
+
+- Same-package files reference each other bare.
+- Sibling-package libraries reference each other via relative paths:
 
 ```hcl
 module "dns" {
@@ -67,13 +99,10 @@ module "dns" {
 }
 ```
 
-### Module source path constraint
-
-Terraform/OpenTofu parses any `source = ` string that does **not** start with
-`./` or `../` as a *registry address* (e.g. `hashicorp/consul/aws`).
-So `source = "infra/dns"` will not work as a local-path reference. To
-reach across the workspace tree, traverse up to the workspace root with
-`../..` and back down:
+Note: Terraform parses any `source = ` string that does **not** start
+with `./` or `../` as a *registry address* (e.g.
+`hashicorp/consul/aws`). To reach across the workspace tree, traverse
+up to the workspace root with `../..` and back down:
 
 ```hcl
 module "dns" {
@@ -81,29 +110,25 @@ module "dns" {
 }
 ```
 
-## What runs when you `bazel run :foo.plan`
+## Restrictions
 
-1. Scratch working directory is created.
-2. All transitive `.tf` files from `deps` and `srcs` are materialized at
-   their workspace-relative paths.
-3. `terrazel.auto.tfvars.json` is rendered from the deploy's `vars` attr
-   and placed in the deploy's package directory.
-4. `tofu init -input=false` runs.
-5. `tofu plan -input=false -out=tfplan` runs.
-
-`bazel run :foo.apply` re-plans, then `tofu apply tfplan` applies the
-freshly captured plan artifact.
-
-State is persisted at
-`$BUILD_WORKSPACE_DIRECTORY/.terrazel/state/<label_hash>/` for the default
-local backend; use a remote backend in your `.tf` for anything beyond
-single-developer experiments.
+- Only `.tf`, `.tf.json`, `.tftpl`, and `.hcl` files are allowed in
+  `srcs`. `.tfvars` and `.tfvars.json` are intentionally rejected —
+  variable values must come through `terraform_deploy(vars = {...})`,
+  not via files committed in libraries.
+- Files from external Bazel modules cannot be included in a deploy: the
+  runner cannot give them a sensible workspace-relative path that
+  Terraform's local-module addressing can reach.
 
 ## TODOs / known gaps
 
-- Build OpenTofu from source via rules_go (currently: download pinned binary).
+- Build OpenTofu from source via rules_go (currently: download pinned
+  binary).
 - Additional sub-commands: `.destroy`, `.validate`, `.fmt`, `.import`,
   `.console`.
-- `tfvars` file inputs (only `vars = {...}` dict supported today).
 - Hermetic provider plugin vendoring via `-plugin-dir`.
-- Windows host support (downloads work; runner script is bash-only).
+- Treat `.terraform.lock.hcl` as a first-class input (currently we set
+  `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=1`).
+- Windows host support (downloads work; launcher script is bash-only).
+- Switch from `go_sdk.host()` to a pinned `go_sdk.download(...)` once
+  release downloads are reachable from our build environment.

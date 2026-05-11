@@ -1,3 +1,0 @@
-package(default_visibility = ["//terraform:__subpackages__"])
-
-exports_files(["runner.sh.tpl"])

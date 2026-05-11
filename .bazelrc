@@ -1,7 +1,0 @@
-common --enable_bzlmod
-common --incompatible_enable_proto_toolchain_resolution
-
-build --incompatible_strict_action_env
-build --verbose_failures
-
-test --test_output=errors

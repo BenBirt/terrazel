@@ -1,5 +1,1 @@
 bazel-*
-.terrazel/
-MODULE.bazel.lock
-.terraform/
-.terraform.lock.hcl

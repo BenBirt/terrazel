@@ -11,11 +11,22 @@ Downstream usage:
 module(
     name = "terrazel",
     version = "0.1.0",
-    compatibility_level = 1,
 )
 
-bazel_dep(name = "bazel_skylib", version = "1.7.1")
-bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_go", version = "0.60.0")
+
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+
+# We use the host Go SDK so terrazel itself stays small and avoids
+# pulling a full Go toolchain into downstream module caches. The Go is
+# only needed to compile terrazel's internal runner binary; downstream
+# Bazel users do not need Go in their projects.
+#
+# TODO(terrazel): switch to a pinned `go_sdk.download(version = ...)`
+# once we're comfortable pre-building the runner binary and shipping it
+# (or relying on `go_sdk.from_file`).
+go_sdk.host()
 
 tofu = use_extension("//toolchain:extensions.bzl", "tofu")
 use_repo(tofu, "tofu_toolchains")
