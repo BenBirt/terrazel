@@ -1,0 +1,16 @@
+load("@terrazel//terraform:defs.bzl", "terraform_deploy", "terraform_library")
+
+package(default_visibility = ["//visibility:public"])
+
+terraform_library(
+    name = "greet_lib",
+    srcs = ["main.tf"],
+)
+
+terraform_deploy(
+    name = "hello",
+    deps = [":greet_lib"],
+    vars = {
+        "name": "world",
+    },
+)
