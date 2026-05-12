@@ -11,6 +11,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,7 +19,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
+
+// stringList is a repeatable string flag (e.g. --var-file can appear multiple times).
+type stringList []string
+
+func (s *stringList) String() string        { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error    { *s = append(*s, v); return nil }
 
 var (
 	flagTofu        = flag.String("tofu", "", "path to the tofu binary")
@@ -27,11 +35,13 @@ var (
 	flagStateDir    = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
 	flagCommand     = flag.String("command", "", `"plan", "apply", or "destroy"`)
 	flagAutoApprove = flag.Bool("auto-approve", false, "skip interactive approval prompt (apply/destroy only)")
+	flagVarFiles    stringList
 )
 
 func main() {
 	log.SetFlags(0)
 	log.SetPrefix("terrazel: ")
+	flag.Var(&flagVarFiles, "var-file", "path to a .tfvars.json file passed to tofu via -var-file (repeatable)")
 	flag.Parse()
 
 	if err := run(); err != nil {
@@ -83,6 +93,10 @@ func run() error {
 	// approval prompt must remain reachable when --auto-approve is not set.
 	env := append(os.Environ(), "TF_IN_AUTOMATION=1")
 
+	if err := checkVarFileDuplicates(cwd, flagVarFiles); err != nil {
+		return err
+	}
+
 	if err := tofu(env, cwd, "init", "-input=false"); err != nil {
 		return fmt.Errorf("tofu init: %w", err)
 	}
@@ -94,9 +108,15 @@ func run() error {
 		stateArgs = nil
 	}
 
+	varFileArgs := make([]string, len(flagVarFiles))
+	for i, f := range flagVarFiles {
+		varFileArgs[i] = "-var-file=" + f
+	}
+
 	switch *flagCommand {
 	case "plan":
-		args := append([]string{"plan", "-input=false", "-out=" + planFile}, stateArgs...)
+		args := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
+		args = append(args, stateArgs...)
 		if err := tofu(env, cwd, args...); err != nil {
 			return fmt.Errorf("tofu plan: %w", err)
 		}
@@ -105,7 +125,8 @@ func run() error {
 		if *flagAutoApprove {
 			// Re-plan to a file so apply is applied against an exact snapshot,
 			// then apply non-interactively.
-			planArgs := append([]string{"plan", "-input=false", "-out=" + planFile}, stateArgs...)
+			planArgs := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
+			planArgs = append(planArgs, stateArgs...)
 			if err := tofu(env, cwd, planArgs...); err != nil {
 				return fmt.Errorf("tofu plan (for apply): %w", err)
 			}
@@ -116,19 +137,82 @@ func run() error {
 			}
 		} else {
 			// Let tofu plan, display the diff, and prompt for approval.
-			applyArgs := append([]string{"apply", "-input=false"}, stateArgs...)
+			applyArgs := append([]string{"apply", "-input=false"}, varFileArgs...)
+			applyArgs = append(applyArgs, stateArgs...)
 			if err := tofu(env, cwd, applyArgs...); err != nil {
 				return fmt.Errorf("tofu apply: %w", err)
 			}
 		}
 	case "destroy":
-		destroyArgs := []string{"destroy", "-input=false"}
+		destroyArgs := append([]string{"destroy", "-input=false"}, varFileArgs...)
 		if *flagAutoApprove {
 			destroyArgs = append(destroyArgs, "-auto-approve")
 		}
 		destroyArgs = append(destroyArgs, stateArgs...)
 		if err := tofu(env, cwd, destroyArgs...); err != nil {
 			return fmt.Errorf("tofu destroy: %w", err)
+		}
+	}
+	return nil
+}
+
+// checkVarFileDuplicates errors if any variable key appears more than once across
+// the generated terrazel.auto.tfvars.json (from vars) and the supplied var files.
+// All files are .tfvars.json so JSON parsing is sufficient for complete detection.
+//
+// TODO: move this check into a bazel build action so duplicates fail at
+// `bazel build` time (with caching) rather than at `bazel run` time.
+func checkVarFileDuplicates(cwd string, varFiles []string) error {
+	type source struct {
+		label string
+		keys  map[string]struct{}
+	}
+
+	readJSONKeys := func(path string) (map[string]struct{}, error) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		var top map[string]json.RawMessage
+		if err := json.Unmarshal(data, &top); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+		keys := make(map[string]struct{}, len(top))
+		for k := range top {
+			keys[k] = struct{}{}
+		}
+		return keys, nil
+	}
+
+	tfvarsPath := filepath.Join(cwd, "terrazel.auto.tfvars.json")
+	tfvarsKeys, err := readJSONKeys(tfvarsPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read terrazel.auto.tfvars.json: %w", err)
+	}
+
+	sources := []source{{"vars", tfvarsKeys}}
+	for _, f := range varFiles {
+		keys, err := readJSONKeys(f)
+		if err != nil {
+			return fmt.Errorf("read var_file %s: %w", f, err)
+		}
+		sources = append(sources, source{f, keys})
+	}
+
+	for i, a := range sources {
+		for j, b := range sources {
+			if j <= i {
+				continue
+			}
+			for k := range a.keys {
+				if _, dup := b.keys[k]; dup {
+					return fmt.Errorf(
+						"variable %q is declared in both %s and %s — "+
+							"keys in var_files must not overlap with vars or each other",
+						k, a.label, b.label,
+					)
+				}
+			}
 		}
 	}
 	return nil

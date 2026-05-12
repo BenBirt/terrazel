@@ -54,6 +54,11 @@ def _tf_runner_impl(ctx):
         name = ctx.attr.deploy.label.name,
     )
 
+    var_file_flags = "".join([
+        '    --var-file="$R/{root}/{p}" \\\n'.format(root = work_tree_root, p = p)
+        for p in deploy.var_file_relpaths
+    ])
+
     out = ctx.actions.declare_file(ctx.label.name + ".sh")
     ctx.actions.write(
         output = out,
@@ -69,7 +74,7 @@ exec "$R/{runner}" \\
     --package-dir="{pkg}" \\
     --state-dir="${{BUILD_WORKSPACE_DIRECTORY:?must be invoked via 'bazel run'}}/{state_dir_rel}" \\
     --command="{command}" \\
-    "$@"
+{var_file_flags}    "$@"
 """.format(
             runner = runner_rel,
             tofu = tofu_rel,
@@ -77,6 +82,7 @@ exec "$R/{runner}" \\
             pkg = deploy.package_dir,
             state_dir_rel = state_dir_rel,
             command = ctx.attr.command,
+            var_file_flags = var_file_flags,
         ),
     )
 
