@@ -12,18 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Bazelisk
-        run: |
-          curl -fsSL -o /usr/local/bin/bazel \
-            https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
-          chmod +x /usr/local/bin/bazel
-
-      - name: Mount Bazel cache
-        uses: actions/cache@v4
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@0.15.0
         with:
-          path: ~/.cache/bazel
-          key: bazel-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion') }}
-          restore-keys: bazel-${{ runner.os }}-
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
 
       - name: Build
         run: bazel build //...
