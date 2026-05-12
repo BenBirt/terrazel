@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 package(default_visibility = ["//terraform/private:__subpackages__"])
 
@@ -10,5 +10,12 @@ go_library(
 
 go_binary(
     name = "runner",
+    embed = [":runner_lib"],
+)
+
+go_test(
+    name = "runner_test",
+    srcs = ["main_test.go"],
+    data = [":runner"],
     embed = [":runner_lib"],
 )

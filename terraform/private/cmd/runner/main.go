@@ -25,23 +25,30 @@ import (
 // stringList is a repeatable string flag (e.g. --var-file can appear multiple times).
 type stringList []string
 
-func (s *stringList) String() string        { return strings.Join(*s, ",") }
-func (s *stringList) Set(v string) error    { *s = append(*s, v); return nil }
+func (s *stringList) String() string     { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
+
+func stringListFlag(name, usage string) *stringList {
+	sl := new(stringList)
+	flag.Var(sl, name, usage)
+	return sl
+}
 
 var (
-	flagTofu        = flag.String("tofu", "", "path to the tofu binary")
-	flagWorkTree    = flag.String("work-tree", "", "path to the materialized work tree root")
-	flagPackageDir  = flag.String("package-dir", "", "workspace-relative dir to cd into within the work tree")
-	flagStateDir    = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
-	flagCommand     = flag.String("command", "", `"plan", "apply", or "destroy"`)
-	flagAutoApprove = flag.Bool("auto-approve", false, "skip interactive approval prompt (apply/destroy only)")
-	flagVarFiles    stringList
+	workTree   = flag.String("work-tree", "", "path to the materialized work tree root")
+	packageDir = flag.String("package-dir", "", "workspace-relative dir to cd into within the work tree")
+	varFiles   = stringListFlag("var-file", "path to a .tfvars.json file passed to tofu via -var-file (repeatable)")
+
+	stateDir = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
+
+	tofu        = flag.String("tofu", "", "path to the tofu binary")
+	command     = flag.String("command", "", `"plan", "apply", or "destroy"`)
+	autoApprove = flag.Bool("auto-approve", false, "skip interactive approval prompt (apply/destroy only)")
 )
 
 func main() {
 	log.SetFlags(0)
 	log.SetPrefix("terrazel: ")
-	flag.Var(&flagVarFiles, "var-file", "path to a .tfvars.json file passed to tofu via -var-file (repeatable)")
 	flag.Parse()
 
 	if err := run(); err != nil {
@@ -56,18 +63,18 @@ func main() {
 
 func run() error {
 	for name, value := range map[string]string{
-		"--tofu":        *flagTofu,
-		"--work-tree":   *flagWorkTree,
-		"--package-dir": *flagPackageDir,
-		"--state-dir":   *flagStateDir,
-		"--command":     *flagCommand,
+		"--tofu":        *tofu,
+		"--work-tree":   *workTree,
+		"--package-dir": *packageDir,
+		"--state-dir":   *stateDir,
+		"--command":     *command,
 	} {
 		if value == "" {
 			return fmt.Errorf("%s is required", name)
 		}
 	}
-	if *flagCommand != "plan" && *flagCommand != "apply" && *flagCommand != "destroy" {
-		return fmt.Errorf(`--command must be "plan", "apply", or "destroy", got %q`, *flagCommand)
+	if *command != "plan" && *command != "apply" && *command != "destroy" {
+		return fmt.Errorf(`--command must be "plan", "apply", or "destroy", got %q`, *command)
 	}
 
 	if os.Getenv("BUILD_WORKSPACE_DIRECTORY") == "" {
@@ -77,11 +84,11 @@ func run() error {
 		)
 	}
 
-	if err := os.MkdirAll(*flagStateDir, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", *flagStateDir, err)
+	if err := os.MkdirAll(*stateDir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", *stateDir, err)
 	}
 
-	cwd := filepath.Join(*flagWorkTree, *flagPackageDir)
+	cwd := filepath.Join(*workTree, *packageDir)
 	if _, err := os.Stat(cwd); err != nil {
 		return fmt.Errorf("work-tree cwd %s: %w", cwd, err)
 	}
@@ -93,63 +100,63 @@ func run() error {
 	// approval prompt must remain reachable when --auto-approve is not set.
 	env := append(os.Environ(), "TF_IN_AUTOMATION=1")
 
-	if err := checkVarFileDuplicates(cwd, flagVarFiles); err != nil {
+	if err := checkVarFileDuplicates(cwd, *varFiles); err != nil {
 		return err
 	}
 
-	if err := tofu(env, cwd, "init", "-input=false"); err != nil {
+	if err := runTofu(env, cwd, "init", "-input=false"); err != nil {
 		return fmt.Errorf("tofu init: %w", err)
 	}
 
-	planFile := filepath.Join(*flagStateDir, "tfplan")
-	stateFile := filepath.Join(*flagStateDir, "terraform.tfstate")
+	planFile := filepath.Join(*stateDir, "tfplan")
+	stateFile := filepath.Join(*stateDir, "terraform.tfstate")
 	stateArgs := []string{"-state=" + stateFile, "-state-out=" + stateFile}
 	if hasBackend(cwd) {
 		stateArgs = nil
 	}
 
-	varFileArgs := make([]string, len(flagVarFiles))
-	for i, f := range flagVarFiles {
+	varFileArgs := make([]string, len(*varFiles))
+	for i, f := range *varFiles {
 		varFileArgs[i] = "-var-file=" + f
 	}
 
-	switch *flagCommand {
+	switch *command {
 	case "plan":
 		args := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
 		args = append(args, stateArgs...)
-		if err := tofu(env, cwd, args...); err != nil {
+		if err := runTofu(env, cwd, args...); err != nil {
 			return fmt.Errorf("tofu plan: %w", err)
 		}
 		fmt.Printf("terrazel: plan saved to %s\n", planFile)
 	case "apply":
-		if *flagAutoApprove {
+		if *autoApprove {
 			// Re-plan to a file so apply is applied against an exact snapshot,
 			// then apply non-interactively.
 			planArgs := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
 			planArgs = append(planArgs, stateArgs...)
-			if err := tofu(env, cwd, planArgs...); err != nil {
+			if err := runTofu(env, cwd, planArgs...); err != nil {
 				return fmt.Errorf("tofu plan (for apply): %w", err)
 			}
 			applyArgs := append([]string{"apply", "-input=false"}, stateArgs...)
 			applyArgs = append(applyArgs, planFile)
-			if err := tofu(env, cwd, applyArgs...); err != nil {
+			if err := runTofu(env, cwd, applyArgs...); err != nil {
 				return fmt.Errorf("tofu apply: %w", err)
 			}
 		} else {
 			// Let tofu plan, display the diff, and prompt for approval.
 			applyArgs := append([]string{"apply", "-input=false"}, varFileArgs...)
 			applyArgs = append(applyArgs, stateArgs...)
-			if err := tofu(env, cwd, applyArgs...); err != nil {
+			if err := runTofu(env, cwd, applyArgs...); err != nil {
 				return fmt.Errorf("tofu apply: %w", err)
 			}
 		}
 	case "destroy":
 		destroyArgs := append([]string{"destroy", "-input=false"}, varFileArgs...)
-		if *flagAutoApprove {
+		if *autoApprove {
 			destroyArgs = append(destroyArgs, "-auto-approve")
 		}
 		destroyArgs = append(destroyArgs, stateArgs...)
-		if err := tofu(env, cwd, destroyArgs...); err != nil {
+		if err := runTofu(env, cwd, destroyArgs...); err != nil {
 			return fmt.Errorf("tofu destroy: %w", err)
 		}
 	}
@@ -218,8 +225,8 @@ func checkVarFileDuplicates(cwd string, varFiles []string) error {
 	return nil
 }
 
-func tofu(env []string, cwd string, args ...string) error {
-	cmd := exec.Command(*flagTofu, args...)
+func runTofu(env []string, cwd string, args ...string) error {
+	cmd := exec.Command(*tofu, args...)
 	cmd.Dir = cwd
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
