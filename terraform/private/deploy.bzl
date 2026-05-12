@@ -20,7 +20,7 @@ invokes `tofu init && tofu <plan|apply>` against it. Nothing is
 mktemp'd; nothing is symlinked from bash.
 """
 
-load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check")
+load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
 load(":runner.bzl", _tf_runner = "tf_runner", _tf_validate_test = "tf_validate_test")
 

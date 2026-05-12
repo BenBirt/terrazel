@@ -5,7 +5,7 @@ directly runnable; bind variable values and produce runnable
 """
 
 load(":deploy.bzl", _terraform_deploy_rule = "terraform_deploy_rule")
-load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check")
+load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":providers.bzl", "TerraformLibraryInfo")
 load(":runner.bzl", _tf_validate_test = "tf_validate_test")
 
