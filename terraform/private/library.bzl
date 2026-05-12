@@ -4,7 +4,9 @@ directly runnable; bind variable values and produce runnable
 `.plan`/`.apply` targets with `terraform_deploy`.
 """
 
+load(":deploy.bzl", _terraform_deploy_rule = "_terraform_deploy")
 load(":providers.bzl", "TerraformLibraryInfo")
+load(":runner.bzl", _tf_validate_test = "tf_validate_test")
 
 # Only structural Terraform inputs are allowed in srcs. Variable values
 # come from `terraform_deploy(vars = {...})`; allowing `.tfvars[.json]`
@@ -29,7 +31,7 @@ def _terraform_library_impl(ctx):
         TerraformLibraryInfo(transitive_files = files),
     ]
 
-terraform_library = rule(
+_terraform_library = rule(
     implementation = _terraform_library_impl,
     attrs = {
         "srcs": attr.label_list(
@@ -63,3 +65,50 @@ a registry address, so to reach a top-level workspace directory from a
 deeply nested module, traverse with `../../...`.
 """,
 )
+
+def terraform_library(name, srcs = None, deps = None, data = None, **kwargs):
+    """A reusable bundle of OpenTofu/Terraform configuration files.
+
+    Generates two labels:
+      - `:<name>`          — the library target (carries TerraformLibraryInfo).
+      - `:<name>.validate` — `bazel test` to run `tofu validate` against this module.
+
+    Args:
+      name: target name.
+      srcs: source .tf/.tf.json/.tftpl/.hcl files.
+      deps: other `terraform_library` targets to compose with.
+      data: arbitrary files to include in the work tree for `file()` calls.
+      **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
+    """
+    common_kwargs = {}
+    for forwarded in ("visibility", "tags", "testonly"):
+        if forwarded in kwargs:
+            common_kwargs[forwarded] = kwargs.pop(forwarded)
+
+    _terraform_library(
+        name = name,
+        srcs = srcs or [],
+        deps = deps or [],
+        data = data or [],
+        **dict(common_kwargs, **kwargs)
+    )
+
+    # Private work tree used only by the validate test. Tags it manual so
+    # it doesn't appear in bazel build //... on its own.
+    _terraform_deploy_rule(
+        name = name + ".validate_work",
+        srcs = [],
+        deps = [":" + name],
+        vars = {},
+        var_files = [],
+        data = [],
+        tags = ["manual"],
+        testonly = True,
+        visibility = ["//visibility:private"],
+    )
+
+    _tf_validate_test(
+        name = name + ".validate",
+        deploy = ":" + name + ".validate_work",
+        **{k: v for k, v in common_kwargs.items() if k != "tags"}
+    )

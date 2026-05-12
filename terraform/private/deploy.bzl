@@ -1,13 +1,14 @@
 """`terraform_deploy` rule + macro.
 
-The macro emits four labels:
-  - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
-                        the materialized working tree (a symlink-mirror of
-                        every transitive .tf input at its workspace-relative
-                        path, plus a generated `terrazel.auto.tfvars.json`).
-  - `:<name>.plan`    — runnable: `bazel run :<name>.plan`
-  - `:<name>.apply`   — runnable: `bazel run :<name>.apply`
-  - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
+The macro emits five labels:
+  - `:<name>`          — the `_terraform_deploy` data target. Its outputs are
+                         the materialized working tree (a symlink-mirror of
+                         every transitive .tf input at its workspace-relative
+                         path, plus a generated `terrazel.auto.tfvars.json`).
+  - `:<name>.plan`     — runnable: `bazel run :<name>.plan`
+  - `:<name>.apply`    — runnable: `bazel run :<name>.apply`
+  - `:<name>.destroy`  — runnable: `bazel run :<name>.destroy`
+  - `:<name>.validate` — test: `bazel test :<name>.validate`
 
 Materialization happens at analysis time via `ctx.actions.symlink` (one
 action per file). At runtime the runner cd's into the work tree and
@@ -16,7 +17,7 @@ mktemp'd; nothing is symlinked from bash.
 """
 
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
-load(":runner.bzl", _tf_runner = "tf_runner")
+load(":runner.bzl", _tf_runner = "tf_runner", _tf_validate_test = "tf_validate_test")
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
@@ -133,11 +134,12 @@ _terraform_deploy = rule(
 def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
-    Generates four labels:
-      - `:<name>`         — data target (the materialized work tree).
-      - `:<name>.plan`    — `bazel run` to produce a plan.
-      - `:<name>.apply`   — `bazel run` to apply.
-      - `:<name>.destroy` — `bazel run` to destroy all managed resources.
+    Generates five labels:
+      - `:<name>`          — data target (the materialized work tree).
+      - `:<name>.plan`     — `bazel run` to produce a plan.
+      - `:<name>.apply`    — `bazel run` to apply.
+      - `:<name>.destroy`  — `bazel run` to destroy all managed resources.
+      - `:<name>.validate` — `bazel test` to validate the configuration.
 
     Args:
       name: target name.
@@ -185,4 +187,10 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         deploy = ":" + name,
         command = "destroy",
         **common_kwargs
+    )
+
+    _tf_validate_test(
+        name = name + ".validate",
+        deploy = ":" + name,
+        **{k: v for k, v in common_kwargs.items() if k != "tags"}
     )

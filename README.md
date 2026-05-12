@@ -152,7 +152,7 @@ module "dns" {
 
 - Build OpenTofu from source via rules_go (currently: download pinned
   binary).
-- Additional sub-commands: `.validate`, `.fmt`, `.import`, `.console`.
+- Additional sub-commands: `.import`, `.console`.
 - Hermetic provider plugin vendoring via `-plugin-dir`.
 - Treat `.terraform.lock.hcl` as a first-class input.
 - Windows host support (downloads work; launcher script is bash-only).
