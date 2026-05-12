@@ -222,6 +222,45 @@ func TestRunner_VarFilesOverlapEachOther(t *testing.T) {
 	}
 }
 
+// TestRunner_WithDataFile verifies that a work tree containing arbitrary data
+// files (e.g. placed there by the `data` attribute) does not interfere with
+// normal runner execution. The files are simply present on disk so that
+// Terraform's file() function can read them.
+func TestRunner_WithDataFile(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+
+	// Simulate a data file materialized by the `data` attribute — its location
+	// is determined at analysis time by the Bazel rule (short_path under the
+	// work tree), so here we just place it inside the work tree directory.
+	workTree := ""
+	for _, arg := range cmd.Args {
+		if strings.HasPrefix(arg, "--work-tree=") {
+			workTree = strings.TrimPrefix(arg, "--work-tree=")
+		}
+	}
+	if workTree == "" {
+		t.Fatal("could not find --work-tree flag in runner cmd args")
+	}
+	dataPath := filepath.Join(workTree, "mypkg", "config.json")
+	if err := os.WriteFile(dataPath, []byte(`{"key":"value"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed with data file present: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	if !invs[0].hasArg("init") {
+		t.Errorf("first invocation should be 'init', got args: %v", invs[0].args)
+	}
+	if !invs[1].hasArg("plan") {
+		t.Errorf("second invocation should be 'plan', got args: %v", invs[1].args)
+	}
+}
+
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	data, err := json.Marshal(v)

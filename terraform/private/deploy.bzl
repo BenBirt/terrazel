@@ -74,7 +74,7 @@ def _materialize(ctx, entries, tfvars_content):
     return outputs
 
 def _terraform_deploy_impl(ctx):
-    direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs]
+    direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs + ctx.files.data]
     var_file_entries = [struct(path = f.short_path, file = f) for f in ctx.files.var_files]
     transitive = [d[TerraformLibraryInfo].transitive_files for d in ctx.attr.deps]
     entries = depset(direct = direct + var_file_entries, transitive = transitive).to_list()
@@ -121,11 +121,16 @@ _terraform_deploy = rule(
                   "Accepts any Label producing a .tfvars.json file (e.g. a genrule output). " +
                   "Keys in var_files must not overlap with keys in vars or other var_files entries.",
         ),
+        "data": attr.label_list(
+            allow_files = True,
+            doc = "Arbitrary files to include in the work tree. " +
+                  "Use to expose files for `file()` calls in Terraform configs.",
+        ),
     },
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, **kwargs):
+def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
     Generates four labels:
@@ -142,6 +147,8 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
       var_files: Labels producing .tfvars.json files passed to tofu via -var-file.
           Accepts any Bazel Label (e.g. a genrule output). Keys must not overlap
           with vars or other var_files entries; duplicate keys are caught at runtime.
+      data: arbitrary files to include in the work tree, enabling `file()` calls
+          in Terraform configs.
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -155,6 +162,7 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         deps = deps or [],
         vars = vars or {},
         var_files = var_files or [],
+        data = data or [],
         **dict(common_kwargs, **kwargs)
     )
 

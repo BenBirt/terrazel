@@ -16,7 +16,7 @@ _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 def _terraform_library_impl(ctx):
     direct = [
         struct(path = f.short_path, file = f)
-        for f in ctx.files.srcs
+        for f in ctx.files.srcs + ctx.files.data
     ]
     transitive = [
         d[TerraformLibraryInfo].transitive_files
@@ -25,7 +25,7 @@ def _terraform_library_impl(ctx):
     files = depset(direct = direct, transitive = transitive)
 
     return [
-        DefaultInfo(files = depset(direct = ctx.files.srcs)),
+        DefaultInfo(files = depset(direct = ctx.files.srcs + ctx.files.data)),
         TerraformLibraryInfo(transitive_files = files),
     ]
 
@@ -39,6 +39,11 @@ terraform_library = rule(
         "deps": attr.label_list(
             providers = [TerraformLibraryInfo],
             doc = "Other `terraform_library` targets whose files this library composes with.",
+        ),
+        "data": attr.label_list(
+            allow_files = True,
+            doc = "Arbitrary files to include alongside the Terraform sources in the work tree. " +
+                  "Use to expose files for `file()` calls in Terraform configs.",
         ),
     },
     doc = """Bundles a set of OpenTofu/Terraform configuration files for reuse.

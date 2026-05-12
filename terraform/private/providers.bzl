@@ -12,9 +12,9 @@ materialized working tree lives and which directory to cd into.
 # the workspace-relative path at which the file should appear in the
 # materialized working tree.
 TerraformLibraryInfo = provider(
-    doc = "Carries the .tf files contributed by a terraform_library and all its transitive library deps.",
+    doc = "Carries the .tf and data files contributed by a terraform_library and all its transitive library deps.",
     fields = {
-        "transitive_files": "depset[struct(path, file)] of .tf files across the dep graph.",
+        "transitive_files": "depset[struct(path, file)] of .tf and arbitrary data files across the dep graph.",
     },
 )
 
