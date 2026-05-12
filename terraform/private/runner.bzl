@@ -74,7 +74,7 @@ exec "$R/{runner}" \\
     --package-dir="{pkg}" \\
     --state-dir="${{BUILD_WORKSPACE_DIRECTORY:?must be invoked via 'bazel run'}}/{state_dir_rel}" \\
     --command="{command}" \\
-{var_file_flags}    "$@"
+{var_file_flags}    -- "$@"
 """.format(
             runner = runner_rel,
             tofu = tofu_rel,

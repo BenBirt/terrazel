@@ -263,7 +263,7 @@ func TestRunner_WithDataFile(t *testing.T) {
 
 func TestRunner_ExtraArgsPassedToPlan(t *testing.T) {
 	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
-	cmd.Args = append(cmd.Args, "--target=aws_instance.foo")
+	cmd.Args = append(cmd.Args, "--", "--target=aws_instance.foo")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
 	}
@@ -281,7 +281,7 @@ func TestRunner_ExtraArgsPassedToApply(t *testing.T) {
 	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
 	cmd.Args = append(cmd.Args,
 		"--command=apply",
-		"--replace=aws_instance.foo",
+		"--", "--replace=aws_instance.foo",
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
@@ -304,7 +304,7 @@ func TestRunner_ExtraArgsPassedToDestroy(t *testing.T) {
 	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
 	cmd.Args = append(cmd.Args,
 		"--command=destroy",
-		"--target=aws_instance.foo",
+		"--", "--target=aws_instance.foo",
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
