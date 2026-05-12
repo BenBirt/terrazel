@@ -75,8 +75,9 @@ def _materialize(ctx, entries, tfvars_content):
 
 def _terraform_deploy_impl(ctx):
     direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs]
+    var_file_entries = [struct(path = f.short_path, file = f) for f in ctx.files.var_files]
     transitive = [d[TerraformLibraryInfo].transitive_files for d in ctx.attr.deps]
-    entries = depset(direct = direct, transitive = transitive).to_list()
+    entries = depset(direct = direct + var_file_entries, transitive = transitive).to_list()
 
     tfvars_content = json.encode_indent(
         {k: v for k, v in ctx.attr.vars.items()},
@@ -96,6 +97,7 @@ def _terraform_deploy_impl(ctx):
             work_tree = outputs[0],
             work_tree_files = work_tree_files,
             package_dir = ctx.label.package,
+            var_file_relpaths = [f.short_path for f in ctx.files.var_files],
         ),
     ]
 
@@ -113,11 +115,17 @@ _terraform_deploy = rule(
         "vars": attr.string_dict(
             doc = "Variable values bound to this deploy. Rendered to terrazel.auto.tfvars.json.",
         ),
+        "var_files": attr.label_list(
+            allow_files = [".tfvars.json"],
+            doc = "Variable-value files passed to every tofu invocation via -var-file. " +
+                  "Accepts any Label producing a .tfvars.json file (e.g. a genrule output). " +
+                  "Keys in var_files must not overlap with keys in vars or other var_files entries.",
+        ),
     },
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, **kwargs):
+def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
     Generates four labels:
@@ -131,6 +139,9 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, **kwargs):
       srcs: optional deploy-local .tf files (e.g. provider/backend config).
       deps: `terraform_library` targets to compose.
       vars: dict of variable name -> value, rendered to terrazel.auto.tfvars.json.
+      var_files: Labels producing .tfvars.json files passed to tofu via -var-file.
+          Accepts any Bazel Label (e.g. a genrule output). Keys must not overlap
+          with vars or other var_files entries; duplicate keys are caught at runtime.
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -143,6 +154,7 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, **kwargs):
         srcs = srcs or [],
         deps = deps or [],
         vars = vars or {},
+        var_files = var_files or [],
         **dict(common_kwargs, **kwargs)
     )
 
