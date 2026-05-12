@@ -261,6 +261,68 @@ func TestRunner_WithDataFile(t *testing.T) {
 	}
 }
 
+func TestRunner_ExtraArgsPassedToPlan(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args, "--", "--target=aws_instance.foo")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	if !plan.hasArg("--target=aws_instance.foo") {
+		t.Errorf("plan invocation missing extra arg, got args: %v", plan.args)
+	}
+}
+
+func TestRunner_ExtraArgsPassedToApply(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args,
+		"--command=apply",
+		"--", "--replace=aws_instance.foo",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	// Expect: init, apply.
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, apply), got %d: %+v", len(invs), invs)
+	}
+	apply := invs[1]
+	if !apply.hasArg("apply") {
+		t.Errorf("second invocation should be 'apply', got args: %v", apply.args)
+	}
+	if !apply.hasArg("--replace=aws_instance.foo") {
+		t.Errorf("apply invocation missing extra arg, got args: %v", apply.args)
+	}
+}
+
+func TestRunner_ExtraArgsPassedToDestroy(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args,
+		"--command=destroy",
+		"--", "--target=aws_instance.foo",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	// Expect: init, destroy.
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, destroy), got %d: %+v", len(invs), invs)
+	}
+	destroy := invs[1]
+	if !destroy.hasArg("destroy") {
+		t.Errorf("second invocation should be 'destroy', got args: %v", destroy.args)
+	}
+	if !destroy.hasArg("--target=aws_instance.foo") {
+		t.Errorf("destroy invocation missing extra arg, got args: %v", destroy.args)
+	}
+}
+
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	data, err := json.Marshal(v)
