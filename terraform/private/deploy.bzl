@@ -1,12 +1,13 @@
 """`terraform_deploy` rule + macro.
 
-The macro emits three labels:
-  - `:<name>`       — the `_terraform_deploy` data target. Its outputs are
-                      the materialized working tree (a symlink-mirror of
-                      every transitive .tf input at its workspace-relative
-                      path, plus a generated `terrazel.auto.tfvars.json`).
-  - `:<name>.plan`  — runnable: `bazel run :<name>.plan`
-  - `:<name>.apply` — runnable: `bazel run :<name>.apply`
+The macro emits four labels:
+  - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
+                        the materialized working tree (a symlink-mirror of
+                        every transitive .tf input at its workspace-relative
+                        path, plus a generated `terrazel.auto.tfvars.json`).
+  - `:<name>.plan`    — runnable: `bazel run :<name>.plan`
+  - `:<name>.apply`   — runnable: `bazel run :<name>.apply`
+  - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
 
 Materialization happens at analysis time via `ctx.actions.symlink` (one
 action per file). At runtime the runner cd's into the work tree and
@@ -119,10 +120,11 @@ _terraform_deploy = rule(
 def terraform_deploy(name, srcs = None, deps = None, vars = None, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
-    Generates three labels:
-      - `:<name>`       — data target (the materialized work tree).
-      - `:<name>.plan`  — `bazel run` to produce a plan.
-      - `:<name>.apply` — `bazel run` to apply.
+    Generates four labels:
+      - `:<name>`         — data target (the materialized work tree).
+      - `:<name>.plan`    — `bazel run` to produce a plan.
+      - `:<name>.apply`   — `bazel run` to apply.
+      - `:<name>.destroy` — `bazel run` to destroy all managed resources.
 
     Args:
       name: target name.
@@ -155,5 +157,12 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, **kwargs):
         name = name + ".apply",
         deploy = ":" + name,
         command = "apply",
+        **common_kwargs
+    )
+
+    _tf_runner(
+        name = name + ".destroy",
+        deploy = ":" + name,
+        command = "destroy",
         **common_kwargs
     )

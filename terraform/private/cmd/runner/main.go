@@ -24,7 +24,7 @@ var (
 	flagWorkTree   = flag.String("work-tree", "", "path to the materialized work tree root")
 	flagPackageDir = flag.String("package-dir", "", "workspace-relative dir to cd into within the work tree")
 	flagStateDir   = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
-	flagCommand    = flag.String("command", "", `"plan" or "apply"`)
+	flagCommand    = flag.String("command", "", `"plan", "apply", or "destroy"`)
 )
 
 func main() {
@@ -54,8 +54,8 @@ func run() error {
 			return fmt.Errorf("%s is required", name)
 		}
 	}
-	if *flagCommand != "plan" && *flagCommand != "apply" {
-		return fmt.Errorf(`--command must be "plan" or "apply", got %q`, *flagCommand)
+	if *flagCommand != "plan" && *flagCommand != "apply" && *flagCommand != "destroy" {
+		return fmt.Errorf(`--command must be "plan", "apply", or "destroy", got %q`, *flagCommand)
 	}
 
 	if os.Getenv("BUILD_WORKSPACE_DIRECTORY") == "" {
@@ -113,6 +113,11 @@ func run() error {
 		applyArgs = append(applyArgs, planFile)
 		if err := tofu(env, cwd, applyArgs...); err != nil {
 			return fmt.Errorf("tofu apply: %w", err)
+		}
+	case "destroy":
+		destroyArgs := append([]string{"destroy", "-auto-approve"}, stateArgs...)
+		if err := tofu(env, cwd, destroyArgs...); err != nil {
+			return fmt.Errorf("tofu destroy: %w", err)
 		}
 	}
 	return nil
