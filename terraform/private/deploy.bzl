@@ -1,6 +1,6 @@
 """`terraform_deploy` rule + macro.
 
-The macro emits four labels:
+The macro always emits:
   - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
                         the materialized working tree (a symlink-mirror of
                         every transitive .tf input at its workspace-relative
@@ -8,6 +8,11 @@ The macro emits four labels:
   - `:<name>.plan`    — runnable: `bazel run :<name>.plan`
   - `:<name>.apply`   — runnable: `bazel run :<name>.apply`
   - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
+  - `:<name>.fmt`     — runnable: `bazel run :<name>.fmt`
+
+When enabled (default):
+  - `:<name>.validate`   — test: `bazel test :<name>.validate` (validate_test=True)
+  - `:<name>.fmt_check`  — test: `bazel test :<name>.fmt_check` (fmt_test=True)
 
 Materialization happens at analysis time via `ctx.actions.symlink` (one
 action per file). At runtime the runner cd's into the work tree and
@@ -15,8 +20,9 @@ invokes `tofu init && tofu <plan|apply>` against it. Nothing is
 mktemp'd; nothing is symlinked from bash.
 """
 
+load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
-load(":runner.bzl", _tf_runner = "tf_runner")
+load(":runner.bzl", _tf_runner = "tf_runner", _tf_validate_test = "tf_validate_test")
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
@@ -101,7 +107,7 @@ def _terraform_deploy_impl(ctx):
         ),
     ]
 
-_terraform_deploy = rule(
+terraform_deploy_rule = rule(
     implementation = _terraform_deploy_impl,
     attrs = {
         "srcs": attr.label_list(
@@ -130,14 +136,19 @@ _terraform_deploy = rule(
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, **kwargs):
+def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, validate_test = True, fmt_test = True, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
-    Generates four labels:
+    Always generates:
       - `:<name>`         — data target (the materialized work tree).
       - `:<name>.plan`    — `bazel run` to produce a plan.
       - `:<name>.apply`   — `bazel run` to apply.
       - `:<name>.destroy` — `bazel run` to destroy all managed resources.
+      - `:<name>.fmt`     — `bazel run` to reformat .tf files in-place.
+
+    When enabled (default True):
+      - `:<name>.validate`  — `bazel test` to validate the configuration (validate_test=True).
+      - `:<name>.fmt_check` — `bazel test` that fails if files are not formatted (fmt_test=True).
 
     Args:
       name: target name.
@@ -149,6 +160,8 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
           with vars or other var_files entries; duplicate keys are caught at runtime.
       data: arbitrary files to include in the work tree, enabling `file()` calls
           in Terraform configs.
+      validate_test: whether to emit a `:<name>.validate` test target (default True).
+      fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -156,7 +169,7 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         if forwarded in kwargs:
             common_kwargs[forwarded] = kwargs.pop(forwarded)
 
-    _terraform_deploy(
+    terraform_deploy_rule(
         name = name,
         srcs = srcs or [],
         deps = deps or [],
@@ -186,3 +199,19 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         command = "destroy",
         **common_kwargs
     )
+
+    if validate_test:
+        # TODO: drop requires-network once hermetic provider vendoring is implemented
+        #       (tofu init currently downloads providers at test time).
+        _tf_validate_test(
+            name = name + ".validate",
+            work_tree = ":" + name,
+            tags = ["requires-network"],
+        )
+
+    _tf_fmt(name = name + ".fmt")
+    if fmt_test:
+        _tf_fmt_check(
+            name = name + ".fmt_check",
+            srcs = srcs or [],
+        )
