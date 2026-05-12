@@ -16,6 +16,6 @@ go_binary(
 go_test(
     name = "runner_test",
     srcs = ["main_test.go"],
-    args = ["-runner=$(location :runner)"],
+    args = ["-runner=$(rlocationpath :runner)"],
     data = [":runner"],
 )
