@@ -6,8 +6,7 @@
 //   - Validate we were invoked via `bazel run` (BUILD_WORKSPACE_DIRECTORY set).
 //   - Run `tofu init` inside the pre-materialized work tree.
 //   - For plan: emit a plan artifact and stop.
-//   - For apply: prompt for approval then apply (or re-plan + apply non-interactively with --auto-approve).
-//   - For destroy: prompt for approval then destroy (or skip prompt with --auto-approve).
+//   - For apply/destroy: delegate to tofu, passing through any extra args.
 package main
 
 import (
@@ -41,9 +40,8 @@ var (
 
 	stateDir = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
 
-	tofu        = flag.String("tofu", "", "path to the tofu binary")
-	command     = flag.String("command", "", `"plan", "apply", or "destroy"`)
-	autoApprove = flag.Bool("auto-approve", false, "skip interactive approval prompt (apply/destroy only)")
+	tofu    = flag.String("tofu", "", "path to the tofu binary")
+	command = flag.String("command", "", `"plan", "apply", or "destroy"`)
 )
 
 func main() {
@@ -99,7 +97,7 @@ func run() error {
 	// don't apply in our wrapped invocation (e.g. "Run `terraform plan`…").
 	// We deliberately do NOT set TF_INPUT=0 globally: variable prompts are
 	// suppressed per-command via -input=false, but the apply/destroy
-	// approval prompt must remain reachable when --auto-approve is not set.
+	// approval prompt must remain reachable.
 	env := append(os.Environ(), "TF_IN_AUTOMATION=1")
 
 	if err := checkVarFileDuplicates(cwd, *varFiles); err != nil {
@@ -132,35 +130,14 @@ func run() error {
 		}
 		fmt.Printf("terrazel: plan saved to %s\n", planFile)
 	case "apply":
-		if *autoApprove {
-			// Re-plan to a file so apply is applied against an exact snapshot,
-			// then apply non-interactively. Extra args (e.g. -replace, -target)
-			// apply to the plan phase where they take effect.
-			planArgs := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
-			planArgs = append(planArgs, stateArgs...)
-			planArgs = append(planArgs, extraArgs...)
-			if err := runTofu(env, cwd, planArgs...); err != nil {
-				return fmt.Errorf("tofu plan (for apply): %w", err)
-			}
-			applyArgs := append([]string{"apply", "-input=false"}, stateArgs...)
-			applyArgs = append(applyArgs, planFile)
-			if err := runTofu(env, cwd, applyArgs...); err != nil {
-				return fmt.Errorf("tofu apply: %w", err)
-			}
-		} else {
-			// Let tofu plan, display the diff, and prompt for approval.
-			applyArgs := append([]string{"apply", "-input=false"}, varFileArgs...)
-			applyArgs = append(applyArgs, stateArgs...)
-			applyArgs = append(applyArgs, extraArgs...)
-			if err := runTofu(env, cwd, applyArgs...); err != nil {
-				return fmt.Errorf("tofu apply: %w", err)
-			}
+		applyArgs := append([]string{"apply", "-input=false"}, varFileArgs...)
+		applyArgs = append(applyArgs, stateArgs...)
+		applyArgs = append(applyArgs, extraArgs...)
+		if err := runTofu(env, cwd, applyArgs...); err != nil {
+			return fmt.Errorf("tofu apply: %w", err)
 		}
 	case "destroy":
 		destroyArgs := append([]string{"destroy", "-input=false"}, varFileArgs...)
-		if *autoApprove {
-			destroyArgs = append(destroyArgs, "-auto-approve")
-		}
 		destroyArgs = append(destroyArgs, stateArgs...)
 		destroyArgs = append(destroyArgs, extraArgs...)
 		if err := runTofu(env, cwd, destroyArgs...); err != nil {

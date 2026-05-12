@@ -300,37 +300,6 @@ func TestRunner_ExtraArgsPassedToApply(t *testing.T) {
 	}
 }
 
-func TestRunner_ExtraArgsPassedToPlanPhaseOfAutoApproveApply(t *testing.T) {
-	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
-	cmd.Args = append(cmd.Args,
-		"--command=apply",
-		"--auto-approve",
-		"--replace=aws_instance.foo",
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
-	}
-	invs := invocations()
-	// Expect: init, plan (for apply), apply.
-	if len(invs) != 3 {
-		t.Fatalf("expected 3 tofu invocations (init, plan, apply), got %d: %+v", len(invs), invs)
-	}
-	plan := invs[1]
-	if !plan.hasArg("plan") {
-		t.Errorf("second invocation should be 'plan', got args: %v", plan.args)
-	}
-	if !plan.hasArg("--replace=aws_instance.foo") {
-		t.Errorf("plan invocation missing extra arg, got args: %v", plan.args)
-	}
-	apply := invs[2]
-	if !apply.hasArg("apply") {
-		t.Errorf("third invocation should be 'apply', got args: %v", apply.args)
-	}
-	if apply.hasArg("--replace=aws_instance.foo") {
-		t.Errorf("apply-from-plan invocation should not have extra arg (it's captured in the plan file), got args: %v", apply.args)
-	}
-}
-
 func TestRunner_ExtraArgsPassedToDestroy(t *testing.T) {
 	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
 	cmd.Args = append(cmd.Args,
