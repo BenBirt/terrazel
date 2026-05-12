@@ -189,8 +189,11 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         **common_kwargs
     )
 
+    # TODO: drop requires-network once hermetic provider vendoring is implemented
+    #       (tofu init currently downloads providers at test time).
     _tf_validate_test(
         name = name + ".validate",
         deploy = ":" + name,
+        tags = ["requires-network"],
         **{k: v for k, v in common_kwargs.items() if k != "tags"}
     )

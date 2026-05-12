@@ -107,8 +107,11 @@ def terraform_library(name, srcs = None, deps = None, data = None, **kwargs):
         visibility = ["//visibility:private"],
     )
 
+    # TODO: drop requires-network once hermetic provider vendoring is implemented
+    #       (tofu init currently downloads providers at test time).
     _tf_validate_test(
         name = name + ".validate",
         deploy = ":" + name + ".validate_work",
+        tags = ["requires-network"],
         **{k: v for k, v in common_kwargs.items() if k != "tags"}
     )
