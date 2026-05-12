@@ -11,8 +11,8 @@ Terraform-compatible) configuration as first-class build targets.
   and carries no variable values.
 - `terraform_deploy` — a *root* invocation that binds variable values to
   one or more `terraform_library` targets. The macro automatically
-  generates two runnable sub-targets: `:foo.plan` and `:foo.apply`.
-  Analogous to `cc_binary`.
+  generates three runnable sub-targets: `:foo.plan`, `:foo.apply`, and
+  `:foo.destroy`. Analogous to `cc_binary`.
 
 ## Quick start
 
@@ -51,7 +51,10 @@ Then:
 
 ```sh
 bazel run //path/to:prod.plan
-bazel run //path/to:prod.apply
+bazel run //path/to:prod.apply             # prompts for approval
+bazel run //path/to:prod.apply -- --auto-approve   # skip prompt
+bazel run //path/to:prod.destroy           # prompts for approval
+bazel run //path/to:prod.destroy -- --auto-approve # skip prompt
 ```
 
 ## How it works
@@ -63,9 +66,17 @@ It also writes `<name>.work/<pkg>/terrazel.auto.tfvars.json` from
 `vars = {...}`.
 
 At runtime the launcher invokes a small Go binary that cd's into the
-materialized work tree, runs `tofu init -input=false`, then runs
-`tofu plan` (saving `tfplan`) or `tofu apply` (which re-plans first so
-it never applies a stale plan).
+materialized work tree, runs `tofu init -input=false`, then runs the
+requested command:
+
+- **plan** — runs `tofu plan`, saving the plan artifact to
+  `<state-dir>/tfplan`.
+- **apply** — runs `tofu apply`, which plans and then prompts for
+  approval. Pass `--auto-approve` to skip the prompt; in that mode the
+  runner saves a plan artifact first and applies it non-interactively
+  (so the applied changes match the reviewed plan exactly).
+- **destroy** — runs `tofu destroy`, prompting for approval. Pass
+  `--auto-approve` to skip the prompt.
 
 State is persisted per-deploy at the deploy target's `$(RULEDIR)`, i.e.
 `bazel-bin/<package>/<name>.terrazel-state/` (already covered by the
@@ -111,8 +122,7 @@ module "dns" {
 
 - Build OpenTofu from source via rules_go (currently: download pinned
   binary).
-- Additional sub-commands: `.destroy`, `.validate`, `.fmt`, `.import`,
-  `.console`.
+- Additional sub-commands: `.validate`, `.fmt`, `.import`, `.console`.
 - Hermetic provider plugin vendoring via `-plugin-dir`.
 - Treat `.terraform.lock.hcl` as a first-class input.
 - Windows host support (downloads work; launcher script is bash-only).
