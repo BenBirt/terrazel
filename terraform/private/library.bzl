@@ -67,22 +67,24 @@ deeply nested module, traverse with `../../...`.
 """,
 )
 
-def terraform_library(name, srcs = None, deps = None, data = None, validate = True, fmt = True, **kwargs):
+def terraform_library(name, srcs = None, deps = None, data = None, validate_test = True, fmt_test = True, **kwargs):
     """A reusable bundle of OpenTofu/Terraform configuration files.
 
-    Generates:
-      - `:<name>`          — the library target (carries TerraformLibraryInfo).
-      - `:<name>.validate` — `bazel test` to run `tofu validate` (if validate=True).
-      - `:<name>.fmt`      — `bazel run` to reformat .tf files in-place (if fmt=True).
-      - `:<name>.fmt_check`— `bazel test` that fails if files are not formatted (if fmt=True).
+    Always generates:
+      - `:<name>`      — the library target (carries TerraformLibraryInfo).
+      - `:<name>.fmt`  — `bazel run` to reformat .tf files in-place.
+
+    When enabled (default True):
+      - `:<name>.validate`   — `bazel test` to run `tofu validate` (validate_test=True).
+      - `:<name>.fmt_check`  — `bazel test` that fails if files are not formatted (fmt_test=True).
 
     Args:
       name: target name.
       srcs: source .tf/.tf.json/.tftpl/.hcl files.
       deps: other `terraform_library` targets to compose with.
       data: arbitrary files to include in the work tree for `file()` calls.
-      validate: whether to emit a `:<name>.validate` test target (default True).
-      fmt: whether to emit `:<name>.fmt` and `:<name>.fmt_check` targets (default True).
+      validate_test: whether to emit a `:<name>.validate` test target (default True).
+      fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -98,7 +100,7 @@ def terraform_library(name, srcs = None, deps = None, data = None, validate = Tr
         **dict(common_kwargs, **kwargs)
     )
 
-    if validate:
+    if validate_test:
         # Private work tree for the validate test — not a meaningful standalone target.
         _terraform_deploy_rule(
             name = name + ".validate_dir",
@@ -119,8 +121,8 @@ def terraform_library(name, srcs = None, deps = None, data = None, validate = Tr
             tags = ["requires-network"],
         )
 
-    if fmt:
-        _tf_fmt(name = name + ".fmt")
+    _tf_fmt(name = name + ".fmt")
+    if fmt_test:
         _tf_fmt_check(
             name = name + ".fmt_check",
             srcs = srcs or [],
