@@ -6,7 +6,8 @@
 //   - Validate we were invoked via `bazel run` (BUILD_WORKSPACE_DIRECTORY set).
 //   - Run `tofu init` inside the pre-materialized work tree.
 //   - For plan: emit a plan artifact and stop.
-//   - For apply: re-plan to capture a fresh plan artifact, then apply it.
+//   - For apply: prompt for approval then apply (or re-plan + apply non-interactively with --auto-approve).
+//   - For destroy: prompt for approval then destroy (or skip prompt with --auto-approve).
 package main
 
 import (
@@ -20,11 +21,12 @@ import (
 )
 
 var (
-	flagTofu       = flag.String("tofu", "", "path to the tofu binary")
-	flagWorkTree   = flag.String("work-tree", "", "path to the materialized work tree root")
-	flagPackageDir = flag.String("package-dir", "", "workspace-relative dir to cd into within the work tree")
-	flagStateDir   = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
-	flagCommand    = flag.String("command", "", `"plan", "apply", or "destroy"`)
+	flagTofu        = flag.String("tofu", "", "path to the tofu binary")
+	flagWorkTree    = flag.String("work-tree", "", "path to the materialized work tree root")
+	flagPackageDir  = flag.String("package-dir", "", "workspace-relative dir to cd into within the work tree")
+	flagStateDir    = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
+	flagCommand     = flag.String("command", "", `"plan", "apply", or "destroy"`)
+	flagAutoApprove = flag.Bool("auto-approve", false, "skip interactive approval prompt (apply/destroy only)")
 )
 
 func main() {
@@ -74,16 +76,12 @@ func run() error {
 		return fmt.Errorf("work-tree cwd %s: %w", cwd, err)
 	}
 
-	// TF_IN_AUTOMATION=1 suppresses interactive-style usage hints in
-	// tofu's output (e.g. "Run `terraform plan` to ..." lines that
-	// wouldn't apply in our wrapped invocation).
-	// TF_INPUT=0 disables every prompt — variable prompts, confirmation
-	// prompts, init's "ask about backend changes" — so the process
-	// never blocks waiting for stdin.
-	env := append(os.Environ(),
-		"TF_IN_AUTOMATION=1",
-		"TF_INPUT=0",
-	)
+	// TF_IN_AUTOMATION=1 suppresses usage-hint lines in tofu output that
+	// don't apply in our wrapped invocation (e.g. "Run `terraform plan`…").
+	// We deliberately do NOT set TF_INPUT=0 globally: variable prompts are
+	// suppressed per-command via -input=false, but the apply/destroy
+	// approval prompt must remain reachable when --auto-approve is not set.
+	env := append(os.Environ(), "TF_IN_AUTOMATION=1")
 
 	if err := tofu(env, cwd, "init", "-input=false"); err != nil {
 		return fmt.Errorf("tofu init: %w", err)
@@ -104,18 +102,31 @@ func run() error {
 		}
 		fmt.Printf("terrazel: plan saved to %s\n", planFile)
 	case "apply":
-		// Always re-plan so apply consumes a freshly captured plan.
-		planArgs := append([]string{"plan", "-input=false", "-out=" + planFile}, stateArgs...)
-		if err := tofu(env, cwd, planArgs...); err != nil {
-			return fmt.Errorf("tofu plan (for apply): %w", err)
-		}
-		applyArgs := append([]string{"apply", "-input=false"}, stateArgs...)
-		applyArgs = append(applyArgs, planFile)
-		if err := tofu(env, cwd, applyArgs...); err != nil {
-			return fmt.Errorf("tofu apply: %w", err)
+		if *flagAutoApprove {
+			// Re-plan to a file so apply is applied against an exact snapshot,
+			// then apply non-interactively.
+			planArgs := append([]string{"plan", "-input=false", "-out=" + planFile}, stateArgs...)
+			if err := tofu(env, cwd, planArgs...); err != nil {
+				return fmt.Errorf("tofu plan (for apply): %w", err)
+			}
+			applyArgs := append([]string{"apply", "-input=false"}, stateArgs...)
+			applyArgs = append(applyArgs, planFile)
+			if err := tofu(env, cwd, applyArgs...); err != nil {
+				return fmt.Errorf("tofu apply: %w", err)
+			}
+		} else {
+			// Let tofu plan, display the diff, and prompt for approval.
+			applyArgs := append([]string{"apply", "-input=false"}, stateArgs...)
+			if err := tofu(env, cwd, applyArgs...); err != nil {
+				return fmt.Errorf("tofu apply: %w", err)
+			}
 		}
 	case "destroy":
-		destroyArgs := append([]string{"destroy", "-auto-approve"}, stateArgs...)
+		destroyArgs := []string{"destroy", "-input=false"}
+		if *flagAutoApprove {
+			destroyArgs = append(destroyArgs, "-auto-approve")
+		}
+		destroyArgs = append(destroyArgs, stateArgs...)
 		if err := tofu(env, cwd, destroyArgs...); err != nil {
 			return fmt.Errorf("tofu destroy: %w", err)
 		}

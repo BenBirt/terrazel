@@ -68,7 +68,8 @@ exec "$R/{runner}" \\
     --work-tree="$R/{work_tree}" \\
     --package-dir="{pkg}" \\
     --state-dir="${{BUILD_WORKSPACE_DIRECTORY:?must be invoked via 'bazel run'}}/{state_dir_rel}" \\
-    --command="{command}"
+    --command="{command}" \\
+    "$@"
 """.format(
             runner = runner_rel,
             tofu = tofu_rel,
@@ -95,7 +96,7 @@ tf_runner = rule(
         ),
         "command": attr.string(
             mandatory = True,
-            values = ["plan", "apply"],
+            values = ["plan", "apply", "destroy"],
         ),
         "_runner_bin": attr.label(
             default = _RUNNER_BIN_LABEL,
