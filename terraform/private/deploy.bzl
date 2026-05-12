@@ -20,7 +20,7 @@ invokes `tofu init && tofu <plan|apply>` against it. Nothing is
 mktemp'd; nothing is symlinked from bash.
 """
 
-load(":fmt.bzl", _tf_fmt = "_tf_fmt", _tf_fmt_check = "_tf_fmt_check")
+load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check")
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
 load(":runner.bzl", _tf_runner = "tf_runner", _tf_validate_test = "tf_validate_test")
 
@@ -107,7 +107,7 @@ def _terraform_deploy_impl(ctx):
         ),
     ]
 
-_terraform_deploy = rule(
+terraform_deploy_rule = rule(
     implementation = _terraform_deploy_impl,
     attrs = {
         "srcs": attr.label_list(
@@ -169,7 +169,7 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         if forwarded in kwargs:
             common_kwargs[forwarded] = kwargs.pop(forwarded)
 
-    _terraform_deploy(
+    terraform_deploy_rule(
         name = name,
         srcs = srcs or [],
         deps = deps or [],

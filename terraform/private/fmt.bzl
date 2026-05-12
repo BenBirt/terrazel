@@ -1,7 +1,7 @@
-"""Private fmt rules used by the `terraform_library` and `terraform_deploy` macros.
+"""Internal fmt rules used by the `terraform_library` and `terraform_deploy` macros.
 
-These are not part of the public API. Use the `fmt = True` parameter on
-`terraform_library` or `terraform_deploy` instead.
+Not part of the public API (`//terraform:defs.bzl`). Use the `fmt_test`
+parameter on `terraform_library` or `terraform_deploy` instead.
 """
 
 load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
@@ -35,7 +35,7 @@ R="${{0}}.runfiles"
         runfiles = ctx.runfiles(files = [tofu.binary]),
     )]
 
-_tf_fmt = rule(
+tf_fmt = rule(
     implementation = _tf_fmt_impl,
     executable = True,
     toolchains = [TOOLCHAIN_TYPE],
@@ -64,7 +64,7 @@ R="${{0}}.runfiles"
         runfiles = ctx.runfiles(files = [tofu.binary] + ctx.files.srcs),
     )]
 
-_tf_fmt_check = rule(
+tf_fmt_check = rule(
     implementation = _tf_fmt_check_impl,
     test = True,
     attrs = {

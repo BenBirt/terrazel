@@ -4,8 +4,8 @@ directly runnable; bind variable values and produce runnable
 `.plan`/`.apply` targets with `terraform_deploy`.
 """
 
-load(":deploy.bzl", _terraform_deploy_rule = "_terraform_deploy")
-load(":fmt.bzl", _tf_fmt = "_tf_fmt", _tf_fmt_check = "_tf_fmt_check")
+load(":deploy.bzl", _terraform_deploy_rule = "terraform_deploy_rule")
+load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check")
 load(":providers.bzl", "TerraformLibraryInfo")
 load(":runner.bzl", _tf_validate_test = "tf_validate_test")
 
