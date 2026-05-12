@@ -5,6 +5,7 @@ directly runnable; bind variable values and produce runnable
 """
 
 load(":deploy.bzl", _terraform_deploy_rule = "_terraform_deploy")
+load(":fmt.bzl", _tf_fmt = "_tf_fmt", _tf_fmt_check = "_tf_fmt_check")
 load(":providers.bzl", "TerraformLibraryInfo")
 load(":runner.bzl", _tf_validate_test = "tf_validate_test")
 
@@ -66,18 +67,22 @@ deeply nested module, traverse with `../../...`.
 """,
 )
 
-def terraform_library(name, srcs = None, deps = None, data = None, **kwargs):
+def terraform_library(name, srcs = None, deps = None, data = None, validate = True, fmt = True, **kwargs):
     """A reusable bundle of OpenTofu/Terraform configuration files.
 
-    Generates two labels:
+    Generates:
       - `:<name>`          — the library target (carries TerraformLibraryInfo).
-      - `:<name>.validate` — `bazel test` to run `tofu validate` against this module.
+      - `:<name>.validate` — `bazel test` to run `tofu validate` (if validate=True).
+      - `:<name>.fmt`      — `bazel run` to reformat .tf files in-place (if fmt=True).
+      - `:<name>.fmt_check`— `bazel test` that fails if files are not formatted (if fmt=True).
 
     Args:
       name: target name.
       srcs: source .tf/.tf.json/.tftpl/.hcl files.
       deps: other `terraform_library` targets to compose with.
       data: arbitrary files to include in the work tree for `file()` calls.
+      validate: whether to emit a `:<name>.validate` test target (default True).
+      fmt: whether to emit `:<name>.fmt` and `:<name>.fmt_check` targets (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -93,25 +98,30 @@ def terraform_library(name, srcs = None, deps = None, data = None, **kwargs):
         **dict(common_kwargs, **kwargs)
     )
 
-    # Private work tree used only by the validate test. Tags it manual so
-    # it doesn't appear in bazel build //... on its own.
-    _terraform_deploy_rule(
-        name = name + ".validate_work",
-        srcs = [],
-        deps = [":" + name],
-        vars = {},
-        var_files = [],
-        data = [],
-        tags = ["manual"],
-        testonly = True,
-        visibility = ["//visibility:private"],
-    )
+    if validate:
+        # Private work tree for the validate test — not a meaningful standalone target.
+        _terraform_deploy_rule(
+            name = name + ".validate_dir",
+            srcs = [],
+            deps = [":" + name],
+            vars = {},
+            var_files = [],
+            data = [],
+            testonly = True,
+            visibility = ["//visibility:private"],
+        )
 
-    # TODO: drop requires-network once hermetic provider vendoring is implemented
-    #       (tofu init currently downloads providers at test time).
-    _tf_validate_test(
-        name = name + ".validate",
-        deploy = ":" + name + ".validate_work",
-        tags = ["requires-network"],
-        **{k: v for k, v in common_kwargs.items() if k != "tags"}
-    )
+        # TODO: drop requires-network once hermetic provider vendoring is implemented
+        #       (tofu init currently downloads providers at test time).
+        _tf_validate_test(
+            name = name + ".validate",
+            work_tree = ":" + name + ".validate_dir",
+            tags = ["requires-network"],
+        )
+
+    if fmt:
+        _tf_fmt(name = name + ".fmt")
+        _tf_fmt_check(
+            name = name + ".fmt_check",
+            srcs = srcs or [],
+        )

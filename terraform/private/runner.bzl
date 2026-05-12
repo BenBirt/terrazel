@@ -114,7 +114,7 @@ tf_runner = rule(
 )
 
 def _tf_validate_test_impl(ctx):
-    deploy = ctx.attr.deploy[TerraformDeployInfo]
+    work_tree_info = ctx.attr.work_tree[TerraformDeployInfo]
     tofu = ctx.toolchains[TOOLCHAIN_TYPE].tofu
     runner_bin = ctx.attr._runner_bin[DefaultInfo].files_to_run.executable
     workspace_name = ctx.workspace_name or "_main"
@@ -123,8 +123,8 @@ def _tf_validate_test_impl(ctx):
     tofu_rel = _runfiles_path(workspace_name, tofu.binary)
     work_tree_root = "{ws}/{pkg}/{name}.work".format(
         ws = workspace_name,
-        pkg = ctx.attr.deploy.label.package,
-        name = ctx.attr.deploy.label.name,
+        pkg = ctx.attr.work_tree.label.package,
+        name = ctx.attr.work_tree.label.name,
     )
 
     out = ctx.actions.declare_file(ctx.label.name + ".sh")
@@ -146,12 +146,12 @@ exec "$R/{runner}" \\
             runner = runner_rel,
             tofu = tofu_rel,
             work_tree = work_tree_root,
-            pkg = deploy.package_dir,
+            pkg = work_tree_info.package_dir,
         ),
     )
 
     runfiles = ctx.runfiles(
-        files = [tofu.binary] + deploy.work_tree_files.to_list(),
+        files = [tofu.binary] + work_tree_info.work_tree_files.to_list(),
     ).merge(ctx.attr._runner_bin[DefaultInfo].default_runfiles)
 
     return [DefaultInfo(executable = out, runfiles = runfiles)]
@@ -160,7 +160,7 @@ tf_validate_test = rule(
     implementation = _tf_validate_test_impl,
     test = True,
     attrs = {
-        "deploy": attr.label(
+        "work_tree": attr.label(
             mandatory = True,
             providers = [TerraformDeployInfo],
         ),

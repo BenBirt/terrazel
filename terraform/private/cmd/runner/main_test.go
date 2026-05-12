@@ -356,10 +356,11 @@ func TestRunner_Validate(t *testing.T) {
 		"--package-dir="+pkgDir,
 		"--command=validate",
 	)
-	// Deliberately omit BUILD_WORKSPACE_DIRECTORY — validate must not require it.
+	// Filter out vars that must not bleed in from the outer Bazel test environment.
 	env := make([]string, 0, len(os.Environ()))
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "BUILD_WORKSPACE_DIRECTORY=") {
+		if !strings.HasPrefix(e, "BUILD_WORKSPACE_DIRECTORY=") &&
+			!strings.HasPrefix(e, "TEST_TMPDIR=") {
 			env = append(env, e)
 		}
 	}

@@ -1,11 +1,7 @@
-"""`terraform_fmt` macro.
+"""Private fmt rules used by the `terraform_library` and `terraform_deploy` macros.
 
-The macro emits:
-  - `:<name>`       — runnable: `bazel run :<name>` rewrites all .tf files in
-                      the package directory to canonical OpenTofu style.
-  - `:<name>_check` — test: `bazel test :<name>_check` fails if any .tf file
-                      in the package directory is not already formatted.
-                      Omitted when `check = False`.
+These are not part of the public API. Use the `fmt = True` parameter on
+`terraform_library` or `terraform_deploy` instead.
 """
 
 load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
@@ -80,26 +76,3 @@ _tf_fmt_check = rule(
     toolchains = [TOOLCHAIN_TYPE],
 )
 
-def terraform_fmt(name, srcs = None, check = True, **kwargs):
-    """Format all .tf files in the current package directory.
-
-    Generates:
-      - `:<name>`       — `bazel run` to reformat .tf files in-place.
-      - `:<name>_check` — `bazel test` that fails if files are not already
-                          formatted (omitted when `check = False`).
-
-    Args:
-      name: target name for the format runner.
-      srcs: .tf source files for the check test's runfiles (typically
-            `glob(["*.tf"])`). Ignored when `check = False`.
-      check: whether to also emit a `:<name>_check` test target (default True).
-      **kwargs: forwarded to both targets (visibility, tags, testonly).
-    """
-    _tf_fmt(name = name, **kwargs)
-
-    if check:
-        _tf_fmt_check(
-            name = name + "_check",
-            srcs = srcs or [],
-            **kwargs
-        )

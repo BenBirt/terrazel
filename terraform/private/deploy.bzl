@@ -1,14 +1,18 @@
 """`terraform_deploy` rule + macro.
 
-The macro emits five labels:
-  - `:<name>`          — the `_terraform_deploy` data target. Its outputs are
-                         the materialized working tree (a symlink-mirror of
-                         every transitive .tf input at its workspace-relative
-                         path, plus a generated `terrazel.auto.tfvars.json`).
-  - `:<name>.plan`     — runnable: `bazel run :<name>.plan`
-  - `:<name>.apply`    — runnable: `bazel run :<name>.apply`
-  - `:<name>.destroy`  — runnable: `bazel run :<name>.destroy`
-  - `:<name>.validate` — test: `bazel test :<name>.validate`
+The macro always emits:
+  - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
+                        the materialized working tree (a symlink-mirror of
+                        every transitive .tf input at its workspace-relative
+                        path, plus a generated `terrazel.auto.tfvars.json`).
+  - `:<name>.plan`    — runnable: `bazel run :<name>.plan`
+  - `:<name>.apply`   — runnable: `bazel run :<name>.apply`
+  - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
+
+When enabled (default):
+  - `:<name>.validate`   — test: `bazel test :<name>.validate` (validate=True)
+  - `:<name>.fmt`        — runnable: `bazel run :<name>.fmt` (fmt=True)
+  - `:<name>.fmt_check`  — test: `bazel test :<name>.fmt_check` (fmt=True)
 
 Materialization happens at analysis time via `ctx.actions.symlink` (one
 action per file). At runtime the runner cd's into the work tree and
@@ -16,6 +20,7 @@ invokes `tofu init && tofu <plan|apply>` against it. Nothing is
 mktemp'd; nothing is symlinked from bash.
 """
 
+load(":fmt.bzl", _tf_fmt = "_tf_fmt", _tf_fmt_check = "_tf_fmt_check")
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
 load(":runner.bzl", _tf_runner = "tf_runner", _tf_validate_test = "tf_validate_test")
 
@@ -131,15 +136,19 @@ _terraform_deploy = rule(
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, **kwargs):
+def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, validate = True, fmt = True, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
-    Generates five labels:
-      - `:<name>`          — data target (the materialized work tree).
-      - `:<name>.plan`     — `bazel run` to produce a plan.
-      - `:<name>.apply`    — `bazel run` to apply.
-      - `:<name>.destroy`  — `bazel run` to destroy all managed resources.
-      - `:<name>.validate` — `bazel test` to validate the configuration.
+    Always generates:
+      - `:<name>`         — data target (the materialized work tree).
+      - `:<name>.plan`    — `bazel run` to produce a plan.
+      - `:<name>.apply`   — `bazel run` to apply.
+      - `:<name>.destroy` — `bazel run` to destroy all managed resources.
+
+    When enabled (default True):
+      - `:<name>.validate`  — `bazel test` to validate the configuration (validate=True).
+      - `:<name>.fmt`       — `bazel run` to reformat .tf files in-place (fmt=True).
+      - `:<name>.fmt_check` — `bazel test` that fails if files are not formatted (fmt=True).
 
     Args:
       name: target name.
@@ -151,6 +160,8 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
           with vars or other var_files entries; duplicate keys are caught at runtime.
       data: arbitrary files to include in the work tree, enabling `file()` calls
           in Terraform configs.
+      validate: whether to emit a `:<name>.validate` test target (default True).
+      fmt: whether to emit `:<name>.fmt` and `:<name>.fmt_check` targets (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -189,11 +200,18 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         **common_kwargs
     )
 
-    # TODO: drop requires-network once hermetic provider vendoring is implemented
-    #       (tofu init currently downloads providers at test time).
-    _tf_validate_test(
-        name = name + ".validate",
-        deploy = ":" + name,
-        tags = ["requires-network"],
-        **{k: v for k, v in common_kwargs.items() if k != "tags"}
-    )
+    if validate:
+        # TODO: drop requires-network once hermetic provider vendoring is implemented
+        #       (tofu init currently downloads providers at test time).
+        _tf_validate_test(
+            name = name + ".validate",
+            work_tree = ":" + name,
+            tags = ["requires-network"],
+        )
+
+    if fmt:
+        _tf_fmt(name = name + ".fmt")
+        _tf_fmt_check(
+            name = name + ".fmt_check",
+            srcs = srcs or [],
+        )
