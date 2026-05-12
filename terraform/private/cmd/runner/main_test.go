@@ -18,6 +18,17 @@ func runnerBin(t *testing.T) string {
 	if *runnerBinPath == "" {
 		t.Skip("runner binary path not set; pass -runner=<path> or run via bazel test")
 	}
+	if filepath.IsAbs(*runnerBinPath) {
+		return *runnerBinPath
+	}
+	// Under bazel test, the flag is an rlocation path; resolve it against the
+	// runfiles directory so exec.Command receives an absolute path.
+	if dir := os.Getenv("RUNFILES_DIR"); dir != "" {
+		return filepath.Join(dir, *runnerBinPath)
+	}
+	if dir := os.Getenv("TEST_SRCDIR"); dir != "" {
+		return filepath.Join(dir, *runnerBinPath)
+	}
 	return *runnerBinPath
 }
 
