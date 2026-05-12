@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,32 +11,93 @@ import (
 	"testing"
 )
 
-// runnerBin returns the path to the compiled runner binary from Bazel runfiles,
-// skipping the test if not running under Bazel.
+var runnerBinPath = flag.String("runner", "", "path to the runner binary under test")
+
 func runnerBin(t *testing.T) string {
 	t.Helper()
-	srcdir := os.Getenv("TEST_SRCDIR")
-	workspace := os.Getenv("TEST_WORKSPACE")
-	if srcdir == "" || workspace == "" {
-		t.Skip("not running under Bazel (TEST_SRCDIR/TEST_WORKSPACE not set)")
+	if *runnerBinPath == "" {
+		t.Skip("runner binary path not set; pass -runner=<path> or run via bazel test")
 	}
-	bin := filepath.Join(srcdir, workspace, "terraform/private/cmd/runner/runner_/runner")
-	if _, err := os.Stat(bin); err != nil {
-		t.Skipf("runner binary not found at %s (check data dep): %v", bin, err)
-	}
-	return bin
+	return *runnerBinPath
 }
 
-// setup creates a work tree with the given vars written to terrazel.auto.tfvars.json,
-// and a fake tofu binary that exits 0 for any invocation. Returns the runner
-// command pre-loaded with all required flags; callers may append --var-file flags.
-func setup(t *testing.T, vars map[string]any) (cmd *exec.Cmd, addVarFile func(map[string]any) string) {
+// invocation records a single call to the fake tofu binary.
+type invocation struct {
+	cwd  string
+	args []string
+}
+
+func (inv invocation) hasArg(arg string) bool {
+	for _, a := range inv.args {
+		if a == arg {
+			return true
+		}
+	}
+	return false
+}
+
+func (inv invocation) hasArgWithPrefix(prefix string) bool {
+	for _, a := range inv.args {
+		if strings.HasPrefix(a, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseInvocations reads the structured log written by the fake tofu script.
+// Each invocation is a block of lines:
+//
+//	cwd=<working directory>
+//	arg=<arg1>
+//	arg=<arg2>
+//	---
+func parseInvocations(data []byte) []invocation {
+	var invs []invocation
+	var cur *invocation
+	for _, line := range strings.Split(string(data), "\n") {
+		switch {
+		case line == "---":
+			if cur != nil {
+				invs = append(invs, *cur)
+				cur = nil
+			}
+		case strings.HasPrefix(line, "cwd="):
+			if cur == nil {
+				cur = &invocation{}
+			}
+			cur.cwd = strings.TrimPrefix(line, "cwd=")
+		case strings.HasPrefix(line, "arg="):
+			if cur == nil {
+				cur = &invocation{}
+			}
+			cur.args = append(cur.args, strings.TrimPrefix(line, "arg="))
+		}
+	}
+	return invs
+}
+
+// setup creates a temporary work tree with the given vars written to
+// terrazel.auto.tfvars.json, and a fake tofu script that logs each invocation
+// to a temp file. It returns:
+//   - a pre-configured runner Cmd (callers may append --var-file flags before running)
+//   - addVarFile: writes a .tfvars.json file and returns its path
+//   - invocations: reads and returns all recorded tofu invocations
+func setup(t *testing.T, vars map[string]any) (
+	cmd *exec.Cmd,
+	addVarFile func(map[string]any) string,
+	invocations func() []invocation,
+) {
 	t.Helper()
 	bin := runnerBin(t)
 	dir := t.TempDir()
 
+	logPath := filepath.Join(dir, "tofu-invocations.log")
 	fakeTofuSh := filepath.Join(dir, "tofu.sh")
-	if err := os.WriteFile(fakeTofuSh, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	script := "#!/bin/sh\n" +
+		"{ printf 'cwd=%s\\n' \"$(pwd)\"; for a in \"$@\"; do printf 'arg=%s\\n' \"$a\"; done; printf -- '---\\n'; } >> \"$TOFU_LOG\"\n" +
+		"exit 0\n"
+	if err := os.WriteFile(fakeTofuSh, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -54,6 +116,15 @@ func setup(t *testing.T, vars map[string]any) (cmd *exec.Cmd, addVarFile func(ma
 		return path
 	}
 
+	invocations = func() []invocation {
+		t.Helper()
+		data, err := os.ReadFile(logPath)
+		if err != nil {
+			t.Fatalf("read tofu invocation log: %v", err)
+		}
+		return parseInvocations(data)
+	}
+
 	cmd = exec.Command(bin,
 		"--tofu="+fakeTofuSh,
 		"--work-tree="+workTree,
@@ -61,27 +132,60 @@ func setup(t *testing.T, vars map[string]any) (cmd *exec.Cmd, addVarFile func(ma
 		"--state-dir="+filepath.Join(dir, "state"),
 		"--command=plan",
 	)
-	cmd.Env = append(os.Environ(), "BUILD_WORKSPACE_DIRECTORY="+dir)
-	return cmd, addVarFile
+	cmd.Env = append(os.Environ(),
+		"BUILD_WORKSPACE_DIRECTORY="+dir,
+		"TOFU_LOG="+logPath,
+	)
+	return cmd, addVarFile, invocations
 }
 
 func TestRunner_NoVarFiles(t *testing.T) {
-	cmd, _ := setup(t, map[string]any{"region": "us-east-1"})
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	// Expect: init, plan.
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	if !invs[0].hasArg("init") {
+		t.Errorf("first invocation should be 'init', got args: %v", invs[0].args)
+	}
+	plan := invs[1]
+	if !plan.hasArg("plan") {
+		t.Errorf("second invocation should be 'plan', got args: %v", plan.args)
+	}
+	if !plan.hasArg("-input=false") {
+		t.Errorf("plan invocation missing -input=false, got args: %v", plan.args)
+	}
+	if plan.hasArgWithPrefix("-var-file=") {
+		t.Errorf("plan invocation should have no -var-file, got args: %v", plan.args)
 	}
 }
 
 func TestRunner_VarFileNoOverlap(t *testing.T) {
-	cmd, addVarFile := setup(t, map[string]any{"region": "us-east-1"})
-	cmd.Args = append(cmd.Args, "--var-file="+addVarFile(map[string]any{"env": "prod"}))
+	cmd, addVarFile, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	vf := addVarFile(map[string]any{"env": "prod"})
+	cmd.Args = append(cmd.Args, "--var-file="+vf)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	if !plan.hasArg("-var-file=" + vf) {
+		t.Errorf("plan invocation missing -var-file=%s, got args: %v", vf, plan.args)
+	}
+	if !plan.hasArg("-input=false") {
+		t.Errorf("plan invocation missing -input=false, got args: %v", plan.args)
 	}
 }
 
 func TestRunner_VarFileOverlapsVars(t *testing.T) {
-	cmd, addVarFile := setup(t, map[string]any{"region": "us-east-1"})
+	cmd, addVarFile, _ := setup(t, map[string]any{"region": "us-east-1"})
 	cmd.Args = append(cmd.Args, "--var-file="+addVarFile(map[string]any{"region": "eu-west-1"}))
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -93,7 +197,7 @@ func TestRunner_VarFileOverlapsVars(t *testing.T) {
 }
 
 func TestRunner_VarFilesOverlapEachOther(t *testing.T) {
-	cmd, addVarFile := setup(t, map[string]any{"region": "us-east-1"})
+	cmd, addVarFile, _ := setup(t, map[string]any{"region": "us-east-1"})
 	cmd.Args = append(cmd.Args,
 		"--var-file="+addVarFile(map[string]any{"env": "prod"}),
 		"--var-file="+addVarFile(map[string]any{"env": "staging"}),
