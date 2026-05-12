@@ -1,65 +1,14 @@
-package main
+package main_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// --- Unit tests for checkVarFileDuplicates ---
-
-func TestCheckVarFileDuplicates_NoFiles(t *testing.T) {
-	dir := t.TempDir()
-	writeJSON(t, filepath.Join(dir, "terrazel.auto.tfvars.json"), map[string]any{"region": "us-east-1"})
-	if err := checkVarFileDuplicates(dir, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestCheckVarFileDuplicates_NoOverlap(t *testing.T) {
-	dir := t.TempDir()
-	writeJSON(t, filepath.Join(dir, "terrazel.auto.tfvars.json"), map[string]any{"region": "us-east-1"})
-	vf := filepath.Join(dir, "extra.tfvars.json")
-	writeJSON(t, vf, map[string]any{"env": "prod"})
-	if err := checkVarFileDuplicates(dir, []string{vf}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestCheckVarFileDuplicates_VarsOverlap(t *testing.T) {
-	dir := t.TempDir()
-	writeJSON(t, filepath.Join(dir, "terrazel.auto.tfvars.json"), map[string]any{"region": "us-east-1"})
-	vf := filepath.Join(dir, "extra.tfvars.json")
-	writeJSON(t, vf, map[string]any{"region": "eu-west-1"})
-	err := checkVarFileDuplicates(dir, []string{vf})
-	if err == nil {
-		t.Fatal("expected error for duplicate key, got nil")
-	}
-	if !strings.Contains(err.Error(), "region") {
-		t.Errorf("expected error to mention the key name, got: %v", err)
-	}
-}
-
-func TestCheckVarFileDuplicates_VarFilesOverlap(t *testing.T) {
-	dir := t.TempDir()
-	writeJSON(t, filepath.Join(dir, "terrazel.auto.tfvars.json"), map[string]any{"region": "us-east-1"})
-	vf1 := filepath.Join(dir, "a.tfvars.json")
-	vf2 := filepath.Join(dir, "b.tfvars.json")
-	writeJSON(t, vf1, map[string]any{"env": "prod"})
-	writeJSON(t, vf2, map[string]any{"env": "staging"})
-	err := checkVarFileDuplicates(dir, []string{vf1, vf2})
-	if err == nil {
-		t.Fatal("expected error for duplicate key across var files, got nil")
-	}
-	if !strings.Contains(err.Error(), "env") {
-		t.Errorf("expected error to mention the key name, got: %v", err)
-	}
-}
-
-// --- Integration tests using the runner binary ---
 
 // runnerBin returns the path to the compiled runner binary from Bazel runfiles,
 // skipping the test if not running under Bazel.
@@ -77,43 +26,14 @@ func runnerBin(t *testing.T) string {
 	return bin
 }
 
-func TestRunnerBin_DuplicateKeyError(t *testing.T) {
+// setup creates a work tree with the given vars written to terrazel.auto.tfvars.json,
+// and a fake tofu binary that exits 0 for any invocation. Returns the runner
+// command pre-loaded with all required flags; callers may append --var-file flags.
+func setup(t *testing.T, vars map[string]any) (cmd *exec.Cmd, addVarFile func(map[string]any) string) {
+	t.Helper()
 	bin := runnerBin(t)
-
-	dir := t.TempDir()
-	workTree := filepath.Join(dir, "work")
-	const pkgDir = "mypkg"
-	if err := os.MkdirAll(filepath.Join(workTree, pkgDir), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(workTree, pkgDir, "terrazel.auto.tfvars.json"), map[string]any{"region": "us-east-1"})
-	vf := filepath.Join(dir, "extra.tfvars.json")
-	writeJSON(t, vf, map[string]any{"region": "eu-west-1"})
-
-	cmd := exec.Command(bin,
-		"--tofu=/usr/bin/false",
-		"--work-tree="+workTree,
-		"--package-dir="+pkgDir,
-		"--state-dir="+filepath.Join(dir, "state"),
-		"--command=plan",
-		"--var-file="+vf,
-	)
-	cmd.Env = append(os.Environ(), "BUILD_WORKSPACE_DIRECTORY="+dir)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected runner to fail on duplicate key, but it succeeded")
-	}
-	if !strings.Contains(string(out), "region") {
-		t.Errorf("expected output to mention the duplicate key, got: %s", out)
-	}
-}
-
-func TestRunnerBin_Success(t *testing.T) {
-	bin := runnerBin(t)
-
 	dir := t.TempDir()
 
-	// Write a minimal fake tofu binary that exits 0 for any invocation.
 	fakeTofuSh := filepath.Join(dir, "tofu.sh")
 	if err := os.WriteFile(fakeTofuSh, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -124,9 +44,17 @@ func TestRunnerBin_Success(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workTree, pkgDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(workTree, pkgDir, "terrazel.auto.tfvars.json"), map[string]any{"region": "us-east-1"})
+	writeJSON(t, filepath.Join(workTree, pkgDir, "terrazel.auto.tfvars.json"), vars)
 
-	cmd := exec.Command(bin,
+	var varFileCounter int
+	addVarFile = func(contents map[string]any) string {
+		varFileCounter++
+		path := filepath.Join(dir, fmt.Sprintf("varfile%d.tfvars.json", varFileCounter))
+		writeJSON(t, path, contents)
+		return path
+	}
+
+	cmd = exec.Command(bin,
 		"--tofu="+fakeTofuSh,
 		"--work-tree="+workTree,
 		"--package-dir="+pkgDir,
@@ -134,8 +62,48 @@ func TestRunnerBin_Success(t *testing.T) {
 		"--command=plan",
 	)
 	cmd.Env = append(os.Environ(), "BUILD_WORKSPACE_DIRECTORY="+dir)
+	return cmd, addVarFile
+}
+
+func TestRunner_NoVarFiles(t *testing.T) {
+	cmd, _ := setup(t, map[string]any{"region": "us-east-1"})
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+}
+
+func TestRunner_VarFileNoOverlap(t *testing.T) {
+	cmd, addVarFile := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args, "--var-file="+addVarFile(map[string]any{"env": "prod"}))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+}
+
+func TestRunner_VarFileOverlapsVars(t *testing.T) {
+	cmd, addVarFile := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args, "--var-file="+addVarFile(map[string]any{"region": "eu-west-1"}))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected runner to fail on duplicate key, but it succeeded")
+	}
+	if !strings.Contains(string(out), "region") {
+		t.Errorf("expected output to mention the duplicate key, got: %s", out)
+	}
+}
+
+func TestRunner_VarFilesOverlapEachOther(t *testing.T) {
+	cmd, addVarFile := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args,
+		"--var-file="+addVarFile(map[string]any{"env": "prod"}),
+		"--var-file="+addVarFile(map[string]any{"env": "staging"}),
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected runner to fail on duplicate key across var files, but it succeeded")
+	}
+	if !strings.Contains(string(out), "env") {
+		t.Errorf("expected output to mention the duplicate key, got: %s", out)
 	}
 }
 

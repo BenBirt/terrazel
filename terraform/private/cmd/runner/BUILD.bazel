@@ -17,5 +17,4 @@ go_test(
     name = "runner_test",
     srcs = ["main_test.go"],
     data = [":runner"],
-    embed = [":runner_lib"],
 )
