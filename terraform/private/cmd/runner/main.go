@@ -62,6 +62,8 @@ func main() {
 }
 
 func run() error {
+	extraArgs := flag.Args()
+
 	for name, value := range map[string]string{
 		"--tofu":        *tofu,
 		"--work-tree":   *workTree,
@@ -124,6 +126,7 @@ func run() error {
 	case "plan":
 		args := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
 		args = append(args, stateArgs...)
+		args = append(args, extraArgs...)
 		if err := runTofu(env, cwd, args...); err != nil {
 			return fmt.Errorf("tofu plan: %w", err)
 		}
@@ -131,9 +134,11 @@ func run() error {
 	case "apply":
 		if *autoApprove {
 			// Re-plan to a file so apply is applied against an exact snapshot,
-			// then apply non-interactively.
+			// then apply non-interactively. Extra args (e.g. -replace, -target)
+			// apply to the plan phase where they take effect.
 			planArgs := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
 			planArgs = append(planArgs, stateArgs...)
+			planArgs = append(planArgs, extraArgs...)
 			if err := runTofu(env, cwd, planArgs...); err != nil {
 				return fmt.Errorf("tofu plan (for apply): %w", err)
 			}
@@ -146,6 +151,7 @@ func run() error {
 			// Let tofu plan, display the diff, and prompt for approval.
 			applyArgs := append([]string{"apply", "-input=false"}, varFileArgs...)
 			applyArgs = append(applyArgs, stateArgs...)
+			applyArgs = append(applyArgs, extraArgs...)
 			if err := runTofu(env, cwd, applyArgs...); err != nil {
 				return fmt.Errorf("tofu apply: %w", err)
 			}
@@ -156,6 +162,7 @@ func run() error {
 			destroyArgs = append(destroyArgs, "-auto-approve")
 		}
 		destroyArgs = append(destroyArgs, stateArgs...)
+		destroyArgs = append(destroyArgs, extraArgs...)
 		if err := runTofu(env, cwd, destroyArgs...); err != nil {
 			return fmt.Errorf("tofu destroy: %w", err)
 		}
