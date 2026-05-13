@@ -215,7 +215,6 @@ module "dns" {
 
 - Build OpenTofu from source via rules_go (currently: download pinned
   binary).
-- Additional sub-commands: `.import`, `.console`.
 - Provider sources beyond the `hashicorp/` namespace (needs registry
   download-protocol resolution).
 - Cross-compilation: the build-time validate action and the runtime
