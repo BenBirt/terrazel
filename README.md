@@ -84,9 +84,13 @@ of a deploy's direct providers and the providers contributed by its
 library `deps` is the set that gets vendored. The exec-platform binary is
 symlinked into the deploy's work tree at Terraform's canonical
 `<host>/<namespace>/<name>/<version>/<os>_<arch>/` layout, and `tofu init`
-is run with `-plugin-dir=<that tree>`. Both `bazel build :foo` (validate)
-and `bazel run :foo.{plan,apply,destroy}` are fully offline once
-`MODULE.bazel.lock` has the provider zips.
+is run with `-plugin-dir=<that tree>`.
+
+The effect is that `tofu init` — both the build-time `validate` action and
+the runtime invocation behind `:foo.plan` — never contacts a registry: no
+network is required to resolve providers once `MODULE.bazel.lock` has the
+zips. The providers' own backends are obviously not offline; `:foo.plan`
+and `:foo.apply` still talk to AWS / GCP / etc. at runtime as usual.
 
 Currently only providers published by the `hashicorp/` namespace (served
 via `releases.hashicorp.com`) are supported.
@@ -131,12 +135,13 @@ file — plus any `var_files` — into a directory tree under
 each file's workspace-relative path. It also writes
 `<name>.work/<pkg>/terrazel.auto.tfvars.json` from `vars = {...}`.
 
-`bazel build :foo` materializes the work tree AND runs
+`bazel build :foo` (whether `:foo` is a `terraform_library` or a
+`terraform_deploy`) materializes the work tree AND runs
 `tofu init -backend=false && tofu validate` as a build action, so
 configuration syntax/reference errors fail the build (with action
 caching). `bazel test //...` runs the `:foo.fmt_check` test targets;
-there is no separate `:foo.validate` test — that role is now filled by
-the build-time action.
+validation does not live in a separate `:foo.validate` target — building
+the rule itself is the validation contract.
 
 At runtime the launcher invokes a small Go binary that cd's into the
 materialized work tree, runs

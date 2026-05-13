@@ -2,11 +2,24 @@
 configuration files, plus transitive `terraform_library` deps. Not
 directly runnable; bind variable values and produce runnable
 `.plan`/`.apply` targets with `terraform_deploy`.
+
+Building a library runs `tofu init -backend=false && tofu validate`
+against its transitive files as part of the build action — the target
+will not build if validation fails. There is no separate `.validate`
+sub-target.
 """
 
-load(":deploy.bzl", _terraform_deploy_rule = "terraform_deploy_rule")
+load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
+load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
 load(":providers.bzl", "TerraformLibraryInfo", "TerraformProviderInfo")
+load(
+    ":work_tree.bzl",
+    "PLUGIN_DIR_RELPATH",
+    _materialize = "materialize",
+    _materialize_plugin_tree = "materialize_plugin_tree",
+    _work_tree_root = "work_tree_root",
+)
 
 # Only structural Terraform inputs are allowed in srcs. Variable values
 # come from `terraform_deploy(vars = {...})`; allowing `.tfvars[.json]`
@@ -33,8 +46,24 @@ def _terraform_library_impl(ctx):
     ]
     providers_depset = depset(direct = direct_providers, transitive = transitive_providers)
 
+    # Materialize a work tree (no tfvars — libraries carry no var values) and
+    # symlink the exec-platform binary for each provider into the plugin
+    # tree. Then run init+validate; the stamp lives in DefaultInfo.files so
+    # `bazel build :foo` fails when validation fails.
+    work_tree_outputs = _materialize(ctx, files.to_list(), tfvars_content = None)
+    plugin_outputs = _materialize_plugin_tree(ctx, providers_depset)
+    work_tree_files = depset(direct = work_tree_outputs + plugin_outputs)
+
+    validate_stamp = _tf_init_validate(
+        ctx,
+        work_tree_files = work_tree_files,
+        work_tree_root = _work_tree_root(ctx),
+        package_dir = ctx.label.package,
+        plugin_dir_relpath = PLUGIN_DIR_RELPATH,
+    )
+
     return [
-        DefaultInfo(files = depset(direct = ctx.files.srcs + ctx.files.data)),
+        DefaultInfo(files = depset(direct = [validate_stamp])),
         TerraformLibraryInfo(
             transitive_files = files,
             providers = providers_depset,
@@ -65,11 +94,15 @@ _terraform_library = rule(
                   "any `terraform_deploy` that pulls this library in.",
         ),
     },
+    toolchains = [TOOLCHAIN_TYPE],
     doc = """Bundles a set of OpenTofu/Terraform configuration files for reuse.
 
 A `terraform_library` carries no variable values and is not directly
 runnable. Use `terraform_deploy` to bind variable values and produce
 `:foo.plan` / `:foo.apply` runnable sub-targets.
+
+Building a library runs `tofu init -backend=false && tofu validate` against
+its transitive files, so configuration errors fail the build.
 
 At runtime, every file in `srcs` is materialized at its
 workspace-relative path, so:
@@ -87,13 +120,10 @@ def terraform_library(name, srcs = None, deps = None, data = None, providers = N
     """A reusable bundle of OpenTofu/Terraform configuration files.
 
     Always generates:
-      - `:<name>`          — the library target (carries TerraformLibraryInfo).
-      - `:<name>.validate` — non-test build target. Building it materializes a
-                             work tree containing the library's transitive files
-                             and runs `tofu init -backend=false && tofu validate`
-                             against the library's package. Use
-                             `bazel build :<name>.validate` (no longer `bazel test`).
-      - `:<name>.fmt`      — `bazel run` to reformat .tf files in-place.
+      - `:<name>`     — the library target. Building it runs
+                        `tofu init -backend=false && tofu validate` against
+                        the library's transitive files.
+      - `:<name>.fmt` — `bazel run` to reformat .tf files in-place.
 
     When enabled (default True):
       - `:<name>.fmt_check`  — `bazel test` that fails if files are not formatted (fmt_test=True).
@@ -122,20 +152,6 @@ def terraform_library(name, srcs = None, deps = None, data = None, providers = N
         data = data or [],
         providers = providers or [],
         **dict(common_kwargs, **kwargs)
-    )
-
-    # Build-time validation: emit a thin deploy rooted at this package so its
-    # build action runs `tofu init -backend=false && tofu validate` against
-    # the library's transitive files.
-    _terraform_deploy_rule(
-        name = name + ".validate",
-        srcs = [],
-        deps = [":" + name],
-        vars = {},
-        var_files = [],
-        data = [],
-        providers = [],
-        **common_kwargs
     )
 
     _tf_fmt(name = name + ".fmt")

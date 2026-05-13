@@ -208,7 +208,7 @@
   "moduleExtensions": {
     "//terraform/providers:extensions.bzl%terraform_providers": {
       "general": {
-        "bzlTransitiveDigest": "r0C6asb0Lydm4ar3A4nkzdqebgnVh4INGr2cUqKS1xU=",
+        "bzlTransitiveDigest": "Cp8nlxUdx0IoBN+mY47Ybv40ERs9YNvGK+57z6kpSTA=",
         "usagesDigest": "94D1f5IBhZrmycRI8IeRuJYdpKJlXjrbzyDp8Ys7VDU=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

@@ -18,8 +18,8 @@ visibility(["public"])
 TerraformProviderInfo = provider(
     doc = "A vendored OpenTofu/Terraform provider plugin binary, per platform.",
     fields = {
-        "address": "string: the canonical provider address, e.g. \"registry.terraform.io/hashicorp/null\".",
-        "version": "string: the provider version, e.g. \"3.2.2\".",
+        "address": "string: the canonical provider address, e.g. \"registry.opentofu.org/hashicorp/aws\".",
+        "version": "string: the provider version, e.g. \"5.70.0\".",
         "binaries": "dict[string -> File]: provider binary keyed by `<os>_<arch>` platform key.",
     },
 )

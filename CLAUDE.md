@@ -41,10 +41,13 @@ Bzlmod extension for vendoring provider plugin binaries.
   on each `terraform_providers.provider(...)` tag is the sole pinning
   layer. `init_action.bzl` rejects any lock file that slips into the
   work tree.
-- `terraform_library` macro emits a private `:<name>.validate` deploy as a
-  non-test build target. Building it runs init+validate against the
-  library in isolation; the visible test surface is only `:<name>.fmt_check`
-  (`bazel query 'kind("test", //...)'` should never return a `.validate`).
+- `terraform_library` rule validates inline: its build action materializes
+  the library's transitive files into a work tree, symlinks the vendored
+  provider binaries, and runs `tofu init -backend=false && tofu validate`.
+  The validate stamp lives in `DefaultInfo.files`, so `bazel build :foo_lib`
+  fails when validation fails. There is no separate `.validate` sub-target
+  on libraries (only `:<name>.fmt_check` shows up under
+  `bazel query 'kind("test", //...)'`).
 
 ## Build / test in the Anthropic sandbox
 
@@ -101,7 +104,9 @@ host_not_allowed`). CI has open network and is unaffected. Locally,
 exercise the parts that don't pull in the runner:
 
 - `bazel build //examples/hello:hello //examples/aws:s3_bucket //examples/gcp:storage_bucket`
-- `bazel build //examples/hello:greet_lib.validate //examples/aws:s3_bucket_lib.validate //examples/gcp:storage_bucket_lib.validate`
+  (deploy targets — each runs `tofu init -backend=false && tofu validate`).
+- `bazel build //examples/hello:greet_lib //examples/aws:s3_bucket_lib //examples/gcp:storage_bucket_lib`
+  (library targets validate inline too, no separate `.validate`).
 - `bazel test //examples/...:all` (fmt_check tests only)
 - Go runner unit tests run cleanly outside Bazel: `cd terraform/private/cmd/runner && go test ./...`
   with a self-contained `go.mod` (the canonical Bazel run is
@@ -136,10 +141,10 @@ download protocol is a TODO.
   means a user could in principle list `.terraform.lock.hcl` in `srcs`.
   `init_action.bzl` fails loudly if one shows up in the materialized tree;
   don't relax that check.
-- Don't add a `validate_test` flag back to the macros. Validation runs
-  at `bazel build` time via the deploy rule's stamp output — that's the
-  contract. The only `:foo.validate` you should see in `bazel query` is
-  the library's non-test build target.
+- Don't add a `validate_test` flag back to the macros, and don't add a
+  `:foo.validate` sub-target. Both library and deploy rules attach the
+  validate stamp directly to their `DefaultInfo.files` — `bazel build :foo`
+  is the validate contract.
 - The runner expects `--plugin-dir` to be required, and `os.MkdirAll`s it
   on first use so the zero-providers case still presents tofu with an
   extant directory.

@@ -1,7 +1,7 @@
 """`terraform_provider` rule.
 
 A `terraform_provider` target wraps the per-platform binaries of a single
-OpenTofu/Terraform provider plugin (e.g. `hashicorp/null` at a given version).
+OpenTofu/Terraform provider plugin (e.g. `hashicorp/aws` at a given version).
 
 It is intended to be instantiated by the `terraform_providers` module
 extension (see `//terraform/providers:extensions.bzl`); end users do not
@@ -41,11 +41,11 @@ terraform_provider = rule(
     attrs = {
         "address": attr.string(
             mandatory = True,
-            doc = "Canonical provider address, e.g. \"registry.terraform.io/hashicorp/null\".",
+            doc = "Canonical provider address, e.g. \"registry.opentofu.org/hashicorp/aws\".",
         ),
         "version": attr.string(
             mandatory = True,
-            doc = "Provider version, e.g. \"3.2.2\".",
+            doc = "Provider version, e.g. \"5.70.0\".",
         ),
         "binaries": attr.label_keyed_string_dict(
             mandatory = True,

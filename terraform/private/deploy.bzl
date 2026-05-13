@@ -27,127 +27,15 @@ load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo", "TerraformProviderInfo")
 load(":runner.bzl", _tf_runner = "tf_runner")
-
-# Path within the deploy's work tree at which we materialize provider plugin
-# binaries. Layout under this root follows Terraform's standard plugin-dir
-# convention: `<host>/<namespace>/<name>/<version>/<os>_<arch>/<binary>`.
-_PLUGIN_DIR_RELPATH = ".terrazel-plugins"
+load(
+    ":work_tree.bzl",
+    "PLUGIN_DIR_RELPATH",
+    _materialize = "materialize",
+    _materialize_plugin_tree = "materialize_plugin_tree",
+    _work_tree_root = "work_tree_root",
+)
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
-
-def _materialize(ctx, entries, tfvars_content):
-    """Materialize the work tree under `<pkg>/<name>.work/`.
-
-    For each `struct(path, file)`, declares `<name>.work/<path>` and
-    symlinks it to `file`. Then writes
-    `<name>.work/<package>/terrazel.auto.tfvars.json` from
-    `tfvars_content`.
-
-    Returns the list of declared output Files.
-    """
-    work_prefix = ctx.label.name + ".work"
-    outputs = []
-    seen = {}
-    for entry in entries:
-        path = entry.path
-        if path.startswith("../"):
-            fail(
-                "terraform_deploy `{}` would include `{}` from an external ".format(
-                    ctx.label,
-                    entry.file.path,
-                ) + "Bazel module. Terraform has no addressing scheme for files outside " +
-                "the workspace root, so this is not supported. Bring the file " +
-                "in-workspace (e.g. via a `genrule` or a local copy) and depend on that instead.",
-            )
-        if path in seen:
-            other = seen[path]
-            if other != entry.file:
-                fail(
-                    "File collision at workspace path `{}` between `{}` and `{}`. ".format(
-                        path,
-                        other.path,
-                        entry.file.path,
-                    ) + "Two libraries are contributing different content at the same path.",
-                )
-            continue
-        seen[path] = entry.file
-        out = ctx.actions.declare_file(work_prefix + "/" + path)
-        ctx.actions.symlink(output = out, target_file = entry.file)
-        outputs.append(out)
-
-    tfvars_path = work_prefix + "/" + ctx.label.package + "/terrazel.auto.tfvars.json"
-    if tfvars_path[len(work_prefix) + 1:] in seen:
-        fail(
-            "`{}` collides with the generated terrazel.auto.tfvars.json. ".format(
-                seen[tfvars_path[len(work_prefix) + 1:]].path,
-            ) + "Rename or remove that file; deploy `vars` is the sole producer of tfvars.",
-        )
-    tfvars_file = ctx.actions.declare_file(tfvars_path)
-    ctx.actions.write(output = tfvars_file, content = tfvars_content)
-    outputs.append(tfvars_file)
-
-    return outputs
-
-def _materialize_plugin_tree(ctx, work_prefix, providers_depset):
-    """Symlink one provider binary per (address, version) into the work tree's
-    plugin dir using Terraform's canonical layout. Returns the list of
-    declared symlink outputs (may be empty).
-
-    Fails if two providers share an address but differ in version, or if
-    a declared provider has no binary for the exec platform.
-    """
-    tofu = ctx.toolchains[TOOLCHAIN_TYPE].tofu
-    platform_key = tofu.platform_key
-
-    seen_versions = {}
-    outputs = []
-    for prov in providers_depset.to_list():
-        prior = seen_versions.get(prov.address)
-        if prior != None:
-            if prior != prov.version:
-                fail(
-                    ("terraform_deploy `{label}` has conflicting versions for provider " +
-                     "`{addr}`: `{a}` vs `{b}`. Pick one in MODULE.bazel.").format(
-                        label = ctx.label,
-                        addr = prov.address,
-                        a = prior,
-                        b = prov.version,
-                    ),
-                )
-            continue
-        seen_versions[prov.address] = prov.version
-
-        binary = prov.binaries.get(platform_key)
-        if binary == None:
-            fail(
-                ("terraform_deploy `{label}` requires provider `{addr}@{ver}` for exec " +
-                 "platform `{plat}`, but the provider was declared without a `{plat}` " +
-                 "entry in its `sha256` map. Add it in MODULE.bazel.").format(
-                    label = ctx.label,
-                    addr = prov.address,
-                    ver = prov.version,
-                    plat = platform_key,
-                ),
-            )
-
-        parts = prov.address.split("/")
-        if len(parts) != 3:
-            fail("invalid provider address `{}` (expected `<host>/<ns>/<name>`)".format(prov.address))
-        target_rel = "{prefix}/{rel}/{host}/{ns}/{name}/{version}/{plat}/{filename}".format(
-            prefix = work_prefix,
-            rel = _PLUGIN_DIR_RELPATH,
-            host = parts[0],
-            ns = parts[1],
-            name = parts[2],
-            version = prov.version,
-            plat = platform_key,
-            filename = binary.basename,
-        )
-        out = ctx.actions.declare_file(target_rel)
-        ctx.actions.symlink(output = out, target_file = binary)
-        outputs.append(out)
-
-    return outputs
 
 def _terraform_deploy_impl(ctx):
     direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs + ctx.files.data]
@@ -160,9 +48,7 @@ def _terraform_deploy_impl(ctx):
         indent = "  ",
     )
 
-    outputs = _materialize(ctx, entries, tfvars_content)
-
-    work_prefix = ctx.label.name + ".work"
+    outputs = _materialize(ctx, entries, tfvars_content = tfvars_content)
 
     # Aggregate providers: direct + transitive via library deps.
     direct_providers = [p[TerraformProviderInfo] for p in ctx.attr.providers]
@@ -171,7 +57,7 @@ def _terraform_deploy_impl(ctx):
         for d in ctx.attr.deps
     ]
     providers_depset = depset(direct = direct_providers, transitive = transitive_provider_sets)
-    plugin_outputs = _materialize_plugin_tree(ctx, work_prefix, providers_depset)
+    plugin_outputs = _materialize_plugin_tree(ctx, providers_depset)
     outputs = outputs + plugin_outputs
 
     # The work tree root is the parent dir of every output. We expose
@@ -179,17 +65,12 @@ def _terraform_deploy_impl(ctx):
     # it via dirname-walking up to `<name>.work/`.
     work_tree_files = depset(direct = outputs)
 
-    work_tree_root = "{bin}/{pkg}/{name}.work".format(
-        bin = ctx.bin_dir.path,
-        pkg = ctx.label.package,
-        name = ctx.label.name,
-    )
     validate_stamp = _tf_init_validate(
         ctx,
         work_tree_files = work_tree_files,
-        work_tree_root = work_tree_root,
+        work_tree_root = _work_tree_root(ctx),
         package_dir = ctx.label.package,
-        plugin_dir_relpath = _PLUGIN_DIR_RELPATH,
+        plugin_dir_relpath = PLUGIN_DIR_RELPATH,
     )
 
     return [
@@ -199,7 +80,7 @@ def _terraform_deploy_impl(ctx):
             work_tree_files = work_tree_files,
             package_dir = ctx.label.package,
             var_file_relpaths = [f.short_path for f in ctx.files.var_files],
-            plugin_dir_relpath = _PLUGIN_DIR_RELPATH,
+            plugin_dir_relpath = PLUGIN_DIR_RELPATH,
         ),
     ]
 

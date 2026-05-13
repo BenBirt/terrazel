@@ -38,7 +38,9 @@ def tf_init_validate(ctx, work_tree_files, work_tree_root, package_dir, plugin_d
     # config. The materialized work tree directory in the sandbox contains
     # symlinks (Bazel-managed); to avoid any chance of conflicting with
     # sandbox read-only enforcement on input trees, copy the work tree into
-    # a scratch dir (dereferencing symlinks) and run there. Throwaway.
+    # a scratch dir under $TMPDIR (dereferencing symlinks) and run there.
+    # Bazel cleans up the action's sandbox on exit, so the copy is throwaway
+    # — no explicit `rm -rf` needed.
     ctx.actions.run_shell(
         inputs = depset(direct = [tofu.binary], transitive = [work_tree_files]),
         outputs = [stamp],
@@ -50,7 +52,6 @@ PACKAGE_DIR=$3
 PLUGIN_DIR_REL=$4
 STAMP=$5
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/terrazel-validate-XXXXXX")
-trap 'rm -rf "$SCRATCH"' EXIT
 cp -RL "$WORK_TREE_ROOT"/. "$SCRATCH"/
 mkdir -p "$SCRATCH/$PLUGIN_DIR_REL"
 CWD="$SCRATCH/$PACKAGE_DIR"

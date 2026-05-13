@@ -10,9 +10,9 @@ Downstream usage in MODULE.bazel:
         "terraform_providers",
     )
     terraform_providers.provider(
-        name = "tf_hashicorp_null",
-        source = "hashicorp/null",
-        version = "3.2.2",
+        name = "tf_hashicorp_aws",
+        source = "hashicorp/aws",
+        version = "5.70.0",
         sha256 = {
             "linux_amd64":   "...",
             "linux_arm64":   "...",
@@ -21,16 +21,18 @@ Downstream usage in MODULE.bazel:
             "windows_amd64": "...",
         },
     )
-    use_repo(terraform_providers, "tf_hashicorp_null")
+    use_repo(terraform_providers, "tf_hashicorp_aws")
 
-The target `@tf_hashicorp_null//:provider` then carries
+The target `@tf_hashicorp_aws//:provider` then carries
 `TerraformProviderInfo` and is passed to `terraform_library`/`terraform_deploy`
 via their `providers` attribute. Bazel's MODULE.bazel.lock pins the resolved
 SHAs, so the provider tree is reproducible and is fetched once per workspace.
 
+See `examples/aws/` and `examples/gcp/` in-tree for full end-to-end uses.
+
 Currently only providers hosted on `releases.hashicorp.com` (i.e. published by
 the `hashicorp/` namespace) are supported. Other registries require resolving
-the download URL via `registry.terraform.io`'s download protocol; that can be
+the download URL via `registry.opentofu.org`'s download protocol; that can be
 added later behind a `url_template` attribute.
 """
 
@@ -213,11 +215,11 @@ _provider_tag = tag_class(
         ),
         "source": attr.string(
             mandatory = True,
-            doc = "Provider source in `<namespace>/<name>` form, e.g. \"hashicorp/null\".",
+            doc = "Provider source in `<namespace>/<name>` form, e.g. \"hashicorp/aws\".",
         ),
         "version": attr.string(
             mandatory = True,
-            doc = "Provider version to pin, e.g. \"3.2.2\".",
+            doc = "Provider version to pin, e.g. \"5.70.0\".",
         ),
         "sha256": attr.string_dict(
             mandatory = True,
