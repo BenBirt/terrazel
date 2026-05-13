@@ -1,0 +1,48 @@
+"""Module declaration for the nested Bazel invocation used by the negative
+integration tests.
+
+Consumes terrazel via `local_path_override` so each case's BUILD file
+(staged at test time from BUILD.tpl — see tests/integration/README.md)
+looks exactly like a downstream user's, except that it is supposed to
+fail in a specific, asserted way.
+"""
+
+module(
+    name = "terrazel_negative_tests",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "terrazel", version = "0.1.0")
+local_path_override(
+    module_name = "terrazel",
+    path = "../../..",
+)
+
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_go", version = "0.60.0")
+
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.26.3")
+
+tofu = use_extension("@terrazel//toolchain:extensions.bzl", "tofu")
+use_repo(tofu, "tofu_toolchains")
+
+register_toolchains("@tofu_toolchains//:all")
+
+# Brought in so the missing-provider case has a provider it *could*
+# reference. The case fails because the deploy does not pass
+# `providers = [...]`, not because the provider itself is unknown.
+terraform_providers = use_extension("@terrazel//terraform/providers:extensions.bzl", "terraform_providers")
+terraform_providers.provider(
+    name = "tf_hashicorp_aws",
+    source = "hashicorp/aws",
+    version = "5.70.0",
+    sha256 = {
+        "linux_amd64": "ef2a61e8112c3b5e70095508aadaadf077e904b62b9cfc22030337f773bba041",
+        "linux_arm64": "19685d9f4c9ddcfa476a9a428c6c612be4a1b4e8e1198fbcbb76436b735284ee",
+        "darwin_amd64": "79bf8fb8f37c308742e287694a9de081ff8502b065a390d1bcfbd241b4eca203",
+        "darwin_arm64": "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
+        "windows_amd64": "3358ee6a2b24c982b7c83fac0af6898644d1bbdabf9c4e0589e91e427641ba88",
+    },
+)
+use_repo(terraform_providers, "tf_hashicorp_aws")

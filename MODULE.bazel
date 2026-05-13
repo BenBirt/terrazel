@@ -58,3 +58,17 @@ terraform_providers.provider(
 )
 
 use_repo(terraform_providers, "tf_hashicorp_aws", "tf_hashicorp_google")
+
+# Bazel-in-Bazel integration tests under //tests/integration. The nested
+# build runs in tests/integration/broken_workspace, whose BUILD and MODULE
+# files live on disk with a .tpl suffix (renamed by the test driver) so
+# the outer Bazel never analyzes their intentionally-failing targets.
+bazel_dep(name = "rules_bazel_integration_test", version = "0.37.1", dev_dependency = True)
+
+bazel_binaries = use_extension(
+    "@rules_bazel_integration_test//:extensions.bzl",
+    "bazel_binaries",
+    dev_dependency = True,
+)
+bazel_binaries.download(version_file = "//:.bazelversion")
+use_repo(bazel_binaries, "bazel_binaries")
