@@ -4,10 +4,13 @@ The macro always emits:
   - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
                         the materialized working tree (a symlink-mirror of
                         every transitive .tf input at its workspace-relative
-                        path, plus a generated `terrazel.auto.tfvars.json`)
-                        and a validate stamp produced by running
+                        path, plus a generated `terrazel.auto.tfvars.json`),
+                        a validate stamp produced by running
                         `tofu init -backend=false && tofu validate` at build
-                        time, so `bazel build :<name>` exercises validation.
+                        time, and (when `var_files` is non-empty) a stamp
+                        produced by a duplicate-variable-key check across
+                        `vars` and every `var_files` entry. So
+                        `bazel build :<name>` exercises both checks.
   - `:<name>.plan`    — runnable: `bazel run :<name>.plan`
   - `:<name>.apply`   — runnable: `bazel run :<name>.apply`
   - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
@@ -27,6 +30,7 @@ load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo", "TerraformProviderInfo")
 load(":runner.bzl", _tf_runner = "tf_runner")
+load(":var_files_check.bzl", "DUPCHECK_BIN", _tf_check_var_files = "tf_check_var_files")
 load(
     ":work_tree.bzl",
     "PLUGIN_DIR_RELPATH",
@@ -73,8 +77,18 @@ def _terraform_deploy_impl(ctx):
         plugin_dir_relpath = PLUGIN_DIR_RELPATH,
     )
 
+    var_files_check_stamp = _tf_check_var_files(
+        ctx,
+        vars_keys = sorted(ctx.attr.vars.keys()),
+        var_files = ctx.files.var_files,
+    )
+
+    default_files = [validate_stamp]
+    if var_files_check_stamp != None:
+        default_files.append(var_files_check_stamp)
+
     return [
-        DefaultInfo(files = depset(direct = [validate_stamp], transitive = [work_tree_files])),
+        DefaultInfo(files = depset(direct = default_files, transitive = [work_tree_files])),
         TerraformDeployInfo(
             work_tree = outputs[0],
             work_tree_files = work_tree_files,
@@ -116,6 +130,11 @@ terraform_deploy_rule = rule(
                   "Each entry is typically a `@<repo>//:provider` target exposed by " +
                   "`terraform_providers.provider(...)` in MODULE.bazel.",
         ),
+        "_dupcheck_bin": attr.label(
+            default = DUPCHECK_BIN,
+            executable = True,
+            cfg = "exec",
+        ),
     },
     toolchains = [TOOLCHAIN_TYPE],
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
@@ -143,7 +162,8 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
       vars: dict of variable name -> value, rendered to terrazel.auto.tfvars.json.
       var_files: Labels producing .tfvars.json files passed to tofu via -var-file.
           Accepts any Bazel Label (e.g. a genrule output). Keys must not overlap
-          with vars or other var_files entries; duplicate keys are caught at runtime.
+          with vars or other var_files entries; duplicate keys fail at
+          `bazel build` time via a dedicated check action.
       data: arbitrary files to include in the work tree, enabling `file()` calls
           in Terraform configs.
       providers: `terraform_provider` targets (typically `@<repo>//:provider` exposed

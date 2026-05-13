@@ -161,9 +161,9 @@ of plugins"), then runs the requested command:
   `--auto-approve` to skip the prompt.
 
 `var_files` entries are passed to every command via `-var-file=<path>`.
-The runner checks for duplicate variable keys across `vars` and all
-`var_files` entries before invoking tofu, and errors immediately if any
-overlap is found.
+A `bazel build` action checks for duplicate variable keys across `vars`
+and all `var_files` entries — overlaps fail the build (with caching),
+not the run.
 
 State is persisted per-deploy at the deploy target's `$(RULEDIR)`, i.e.
 `bazel-bin/<package>/<name>.terrazel-state/` (already covered by the
@@ -206,7 +206,7 @@ module "dns" {
   enables complete duplicate-key detection without an HCL parser. If you
   need `.tfvars` (HCL) input, convert it to JSON in a `genrule` first.
 - Variable keys must be unique across `vars` and all `var_files` entries.
-  The runner checks this before invoking tofu and errors on any overlap.
+  A dedicated `bazel build` action checks this and fails on any overlap.
 - Files from external Bazel modules cannot be included in a deploy: the
   runner cannot give them a sensible workspace-relative path that
   Terraform's local-module addressing can reach.
@@ -221,7 +221,4 @@ module "dns" {
   runner both consume the exec-platform provider binary, so the runtime
   host must match the build host.
 - Windows host support (downloads work; launcher script is bash-only).
-- Move `var_files` duplicate-key detection into a `bazel build` action
-  so conflicts are caught at build time (with caching) rather than at
-  `bazel run` time.
 - Support `.tfvars` (HCL) in `var_files` once an HCL parser is available.
