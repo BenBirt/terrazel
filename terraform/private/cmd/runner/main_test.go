@@ -205,33 +205,6 @@ func TestRunner_VarFileNoOverlap(t *testing.T) {
 	}
 }
 
-func TestRunner_VarFileOverlapsVars(t *testing.T) {
-	cmd, addVarFile, _ := setup(t, map[string]any{"region": "us-east-1"})
-	cmd.Args = append(cmd.Args, "--var-file="+addVarFile(map[string]any{"region": "eu-west-1"}))
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected runner to fail on duplicate key, but it succeeded")
-	}
-	if !strings.Contains(string(out), "region") {
-		t.Errorf("expected output to mention the duplicate key, got: %s", out)
-	}
-}
-
-func TestRunner_VarFilesOverlapEachOther(t *testing.T) {
-	cmd, addVarFile, _ := setup(t, map[string]any{"region": "us-east-1"})
-	cmd.Args = append(cmd.Args,
-		"--var-file="+addVarFile(map[string]any{"env": "prod"}),
-		"--var-file="+addVarFile(map[string]any{"env": "staging"}),
-	)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected runner to fail on duplicate key across var files, but it succeeded")
-	}
-	if !strings.Contains(string(out), "env") {
-		t.Errorf("expected output to mention the duplicate key, got: %s", out)
-	}
-}
-
 // TestRunner_WithDataFile verifies that a work tree containing arbitrary data
 // files (e.g. placed there by the `data` attribute) does not interfere with
 // normal runner execution. The files are simply present on disk so that

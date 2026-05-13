@@ -10,11 +10,11 @@
 //
 // Configuration validation (`tofu init -backend=false && tofu validate`)
 // happens at `bazel build` time via the deploy rule's TofuValidate action,
-// not here.
+// not here. Duplicate-variable-key detection across `vars` and `var_files`
+// likewise happens at build time via the dupcheck action.
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -105,9 +105,6 @@ func run() error {
 	// approval prompt must remain reachable.
 	env := append(os.Environ(), "TF_IN_AUTOMATION=1")
 
-	if err := checkVarFileDuplicates(cwd, *varFiles); err != nil {
-		return err
-	}
 	// Ensure the vendored plugin tree exists even when zero providers are in
 	// scope (the deploy declares no symlinks under .terrazel-plugins/ in that
 	// case, so the runfiles tree lacks the directory). -plugin-dir overrides
@@ -152,68 +149,6 @@ func run() error {
 		destroyArgs = append(destroyArgs, extraArgs...)
 		if err := runTofu(env, cwd, destroyArgs...); err != nil {
 			return fmt.Errorf("tofu destroy: %w", err)
-		}
-	}
-	return nil
-}
-
-// checkVarFileDuplicates errors if any variable key appears more than once across
-// the generated terrazel.auto.tfvars.json (from vars) and the supplied var files.
-// All files are .tfvars.json so JSON parsing is sufficient for complete detection.
-//
-// TODO: move this check into a bazel build action so duplicates fail at
-// `bazel build` time (with caching) rather than at `bazel run` time.
-func checkVarFileDuplicates(cwd string, varFiles []string) error {
-	type source struct {
-		label string
-		keys  map[string]struct{}
-	}
-
-	readJSONKeys := func(path string) (map[string]struct{}, error) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		var top map[string]json.RawMessage
-		if err := json.Unmarshal(data, &top); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", path, err)
-		}
-		keys := make(map[string]struct{}, len(top))
-		for k := range top {
-			keys[k] = struct{}{}
-		}
-		return keys, nil
-	}
-
-	tfvarsPath := filepath.Join(cwd, "terrazel.auto.tfvars.json")
-	tfvarsKeys, err := readJSONKeys(tfvarsPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read terrazel.auto.tfvars.json: %w", err)
-	}
-
-	sources := []source{{"vars", tfvarsKeys}}
-	for _, f := range varFiles {
-		keys, err := readJSONKeys(f)
-		if err != nil {
-			return fmt.Errorf("read var_file %s: %w", f, err)
-		}
-		sources = append(sources, source{f, keys})
-	}
-
-	for i, a := range sources {
-		for j, b := range sources {
-			if j <= i {
-				continue
-			}
-			for k := range a.keys {
-				if _, dup := b.keys[k]; dup {
-					return fmt.Errorf(
-						"variable %q is declared in both %s and %s — "+
-							"keys in var_files must not overlap with vars or each other",
-						k, a.label, b.label,
-					)
-				}
-			}
 		}
 	}
 	return nil
