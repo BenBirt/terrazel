@@ -32,17 +32,22 @@ type stringList []string
 func (s *stringList) String() string     { return strings.Join(*s, ",") }
 func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
 
+func stringListFlag(name, usage string) *stringList {
+	sl := new(stringList)
+	flag.Var(sl, name, usage)
+	return sl
+}
+
+var (
+	stamp    = flag.String("stamp", "", "path to a stamp file to touch on success")
+	varsKeys = stringListFlag("vars-key", "key from the deploy's `vars` dict (repeatable)")
+	varFiles = stringListFlag("var-file", "`label:path` of a .tfvars.json file (repeatable)")
+)
+
 func main() {
-	var (
-		varsKeys stringList
-		varFiles stringList
-	)
-	stamp := flag.String("stamp", "", "path to a stamp file to touch on success")
-	flag.Var(&varsKeys, "vars-key", "key from the deploy's `vars` dict (repeatable)")
-	flag.Var(&varFiles, "var-file", "`label:path` of a .tfvars.json file (repeatable)")
 	flag.Parse()
 
-	if err := run(varsKeys, varFiles, *stamp); err != nil {
+	if err := run(*varsKeys, *varFiles, *stamp); err != nil {
 		fmt.Fprintln(os.Stderr, "terrazel: "+err.Error())
 		os.Exit(1)
 	}
