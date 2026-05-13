@@ -31,6 +31,7 @@ TerraformLibraryInfo = provider(
     doc = "Carries the .tf and data files contributed by a terraform_library and all its transitive library deps.",
     fields = {
         "transitive_files": "depset[struct(path, file)] of .tf and arbitrary data files across the dep graph.",
+        "providers": "depset[TerraformProviderInfo]: providers contributed by this library and its transitive deps.",
     },
 )
 
@@ -45,5 +46,7 @@ TerraformDeployInfo = provider(
         "work_tree_files": "depset[File]: every file inside the work tree (so runfiles include them).",
         "package_dir": "string: workspace-relative directory the runner cd's into before running tofu.",
         "var_file_relpaths": "list[string]: workspace-relative paths of -var-file inputs, in declaration order.",
+        "plugin_dir_relpath": "string: work-tree-root-relative path to the vendored plugin tree. " +
+                              "The runner joins it with the runfiles work tree root to form `-plugin-dir=...`.",
     },
 )

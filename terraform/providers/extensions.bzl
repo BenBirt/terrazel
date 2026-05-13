@@ -161,6 +161,15 @@ def _terraform_provider_download_impl(repository_ctx):
 
         entries.append(("{}/{}".format(extract_dir, binary_filename), platform_key))
 
+    # Extracted binaries live in nested directories; Bazel doesn't auto-expose
+    # them as source labels, so the `label_keyed_string_dict` on
+    # `terraform_provider` couldn't resolve them without an explicit
+    # `exports_files()`.
+    exports_lines = ["exports_files(["]
+    for binary_path, _ in entries:
+        exports_lines.append("    \"{}\",".format(binary_path))
+    exports_lines.append("])")
+
     repository_ctx.file("WORKSPACE", "")
     repository_ctx.file(
         "BUILD.bazel",
@@ -169,6 +178,8 @@ load("@terrazel//terraform/private:provider.bzl", "terraform_provider")
 
 package(default_visibility = ["//visibility:public"])
 
+{exports}
+
 terraform_provider(
     name = "provider",
     address = "{address}",
@@ -176,6 +187,7 @@ terraform_provider(
 {binaries}
 )
 """.format(
+            exports = "\n".join(exports_lines),
             address = address,
             version = version,
             binaries = _format_binaries_dict(entries),

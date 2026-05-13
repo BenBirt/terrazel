@@ -6,7 +6,7 @@ directly runnable; bind variable values and produce runnable
 
 load(":deploy.bzl", _terraform_deploy_rule = "terraform_deploy_rule")
 load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
-load(":providers.bzl", "TerraformLibraryInfo")
+load(":providers.bzl", "TerraformLibraryInfo", "TerraformProviderInfo")
 
 # Only structural Terraform inputs are allowed in srcs. Variable values
 # come from `terraform_deploy(vars = {...})`; allowing `.tfvars[.json]`
@@ -26,9 +26,19 @@ def _terraform_library_impl(ctx):
     ]
     files = depset(direct = direct, transitive = transitive)
 
+    direct_providers = [p[TerraformProviderInfo] for p in ctx.attr.providers]
+    transitive_providers = [
+        d[TerraformLibraryInfo].providers
+        for d in ctx.attr.deps
+    ]
+    providers_depset = depset(direct = direct_providers, transitive = transitive_providers)
+
     return [
         DefaultInfo(files = depset(direct = ctx.files.srcs + ctx.files.data)),
-        TerraformLibraryInfo(transitive_files = files),
+        TerraformLibraryInfo(
+            transitive_files = files,
+            providers = providers_depset,
+        ),
     ]
 
 _terraform_library = rule(
@@ -46,6 +56,13 @@ _terraform_library = rule(
             allow_files = True,
             doc = "Arbitrary files to include alongside the Terraform sources in the work tree. " +
                   "Use to expose files for `file()` calls in Terraform configs.",
+        ),
+        "providers": attr.label_list(
+            providers = [TerraformProviderInfo],
+            doc = "Vendored OpenTofu/Terraform providers this library references. " +
+                  "Declare each provider once in MODULE.bazel via the `terraform_providers` " +
+                  "extension and pass `@<repo>//:provider` here. Propagates transitively to " +
+                  "any `terraform_deploy` that pulls this library in.",
         ),
     },
     doc = """Bundles a set of OpenTofu/Terraform configuration files for reuse.
@@ -66,7 +83,7 @@ deeply nested module, traverse with `../../...`.
 """,
 )
 
-def terraform_library(name, srcs = None, deps = None, data = None, fmt_test = True, **kwargs):
+def terraform_library(name, srcs = None, deps = None, data = None, providers = None, fmt_test = True, **kwargs):
     """A reusable bundle of OpenTofu/Terraform configuration files.
 
     Always generates:
@@ -86,6 +103,10 @@ def terraform_library(name, srcs = None, deps = None, data = None, fmt_test = Tr
       srcs: source .tf/.tf.json/.tftpl/.hcl files.
       deps: other `terraform_library` targets to compose with.
       data: arbitrary files to include in the work tree for `file()` calls.
+      providers: `terraform_provider` targets (typically `@<repo>//:provider` exposed
+          by `terraform_providers.provider(...)` in MODULE.bazel) that this library
+          references in `required_providers`. Propagates transitively to any
+          `terraform_deploy` consuming this library.
       fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
@@ -99,6 +120,7 @@ def terraform_library(name, srcs = None, deps = None, data = None, fmt_test = Tr
         srcs = srcs or [],
         deps = deps or [],
         data = data or [],
+        providers = providers or [],
         **dict(common_kwargs, **kwargs)
     )
 
@@ -112,6 +134,7 @@ def terraform_library(name, srcs = None, deps = None, data = None, fmt_test = Tr
         vars = {},
         var_files = [],
         data = [],
+        providers = [],
         **common_kwargs
     )
 

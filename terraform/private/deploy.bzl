@@ -25,8 +25,13 @@ mktemp'd; nothing is symlinked from bash.
 load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
-load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
+load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo", "TerraformProviderInfo")
 load(":runner.bzl", _tf_runner = "tf_runner")
+
+# Path within the deploy's work tree at which we materialize provider plugin
+# binaries. Layout under this root follows Terraform's standard plugin-dir
+# convention: `<host>/<namespace>/<name>/<version>/<os>_<arch>/<binary>`.
+_PLUGIN_DIR_RELPATH = ".terrazel-plugins"
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
@@ -83,6 +88,67 @@ def _materialize(ctx, entries, tfvars_content):
 
     return outputs
 
+def _materialize_plugin_tree(ctx, work_prefix, providers_depset):
+    """Symlink one provider binary per (address, version) into the work tree's
+    plugin dir using Terraform's canonical layout. Returns the list of
+    declared symlink outputs (may be empty).
+
+    Fails if two providers share an address but differ in version, or if
+    a declared provider has no binary for the exec platform.
+    """
+    tofu = ctx.toolchains[TOOLCHAIN_TYPE].tofu
+    platform_key = tofu.platform_key
+
+    seen_versions = {}
+    outputs = []
+    for prov in providers_depset.to_list():
+        prior = seen_versions.get(prov.address)
+        if prior != None:
+            if prior != prov.version:
+                fail(
+                    ("terraform_deploy `{label}` has conflicting versions for provider " +
+                     "`{addr}`: `{a}` vs `{b}`. Pick one in MODULE.bazel.").format(
+                        label = ctx.label,
+                        addr = prov.address,
+                        a = prior,
+                        b = prov.version,
+                    ),
+                )
+            continue
+        seen_versions[prov.address] = prov.version
+
+        binary = prov.binaries.get(platform_key)
+        if binary == None:
+            fail(
+                ("terraform_deploy `{label}` requires provider `{addr}@{ver}` for exec " +
+                 "platform `{plat}`, but the provider was declared without a `{plat}` " +
+                 "entry in its `sha256` map. Add it in MODULE.bazel.").format(
+                    label = ctx.label,
+                    addr = prov.address,
+                    ver = prov.version,
+                    plat = platform_key,
+                ),
+            )
+
+        parts = prov.address.split("/")
+        if len(parts) != 3:
+            fail("invalid provider address `{}` (expected `<host>/<ns>/<name>`)".format(prov.address))
+        target_rel = "{prefix}/{rel}/{host}/{ns}/{name}/{version}/{plat}/{filename}".format(
+            prefix = work_prefix,
+            rel = _PLUGIN_DIR_RELPATH,
+            host = parts[0],
+            ns = parts[1],
+            name = parts[2],
+            version = prov.version,
+            plat = platform_key,
+            filename = binary.basename,
+        )
+        out = ctx.actions.declare_file(target_rel)
+        ctx.actions.symlink(output = out, target_file = binary)
+        outputs.append(out)
+
+    return outputs
+
 def _terraform_deploy_impl(ctx):
     direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs + ctx.files.data]
     var_file_entries = [struct(path = f.short_path, file = f) for f in ctx.files.var_files]
@@ -95,6 +161,18 @@ def _terraform_deploy_impl(ctx):
     )
 
     outputs = _materialize(ctx, entries, tfvars_content)
+
+    work_prefix = ctx.label.name + ".work"
+
+    # Aggregate providers: direct + transitive via library deps.
+    direct_providers = [p[TerraformProviderInfo] for p in ctx.attr.providers]
+    transitive_provider_sets = [
+        d[TerraformLibraryInfo].providers
+        for d in ctx.attr.deps
+    ]
+    providers_depset = depset(direct = direct_providers, transitive = transitive_provider_sets)
+    plugin_outputs = _materialize_plugin_tree(ctx, work_prefix, providers_depset)
+    outputs = outputs + plugin_outputs
 
     # The work tree root is the parent dir of every output. We expose
     # the first output as `work_tree`; the runner derives the root from
@@ -111,6 +189,7 @@ def _terraform_deploy_impl(ctx):
         work_tree_files = work_tree_files,
         work_tree_root = work_tree_root,
         package_dir = ctx.label.package,
+        plugin_dir_relpath = _PLUGIN_DIR_RELPATH,
     )
 
     return [
@@ -120,6 +199,7 @@ def _terraform_deploy_impl(ctx):
             work_tree_files = work_tree_files,
             package_dir = ctx.label.package,
             var_file_relpaths = [f.short_path for f in ctx.files.var_files],
+            plugin_dir_relpath = _PLUGIN_DIR_RELPATH,
         ),
     ]
 
@@ -148,12 +228,19 @@ terraform_deploy_rule = rule(
             doc = "Arbitrary files to include in the work tree. " +
                   "Use to expose files for `file()` calls in Terraform configs.",
         ),
+        "providers": attr.label_list(
+            providers = [TerraformProviderInfo],
+            doc = "Vendored OpenTofu/Terraform providers this deploy declares directly. " +
+                  "Unioned with providers contributed transitively by `deps`. " +
+                  "Each entry is typically a `@<repo>//:provider` target exposed by " +
+                  "`terraform_providers.provider(...)` in MODULE.bazel.",
+        ),
     },
     toolchains = [TOOLCHAIN_TYPE],
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, fmt_test = True, **kwargs):
+def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, providers = None, fmt_test = True, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
     Always generates:
@@ -178,6 +265,11 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
           with vars or other var_files entries; duplicate keys are caught at runtime.
       data: arbitrary files to include in the work tree, enabling `file()` calls
           in Terraform configs.
+      providers: `terraform_provider` targets (typically `@<repo>//:provider` exposed
+          by `terraform_providers.provider(...)` in MODULE.bazel) declared at the deploy
+          level. Unioned with providers transitively contributed by `deps`. The exec
+          platform binary is symlinked into the work tree's plugin dir; `tofu init`
+          runs offline against it.
       fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
@@ -193,6 +285,7 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         vars = vars or {},
         var_files = var_files or [],
         data = data or [],
+        providers = providers or [],
         **dict(common_kwargs, **kwargs)
     )
 
