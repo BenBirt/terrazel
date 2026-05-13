@@ -4,14 +4,16 @@ The macro always emits:
   - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
                         the materialized working tree (a symlink-mirror of
                         every transitive .tf input at its workspace-relative
-                        path, plus a generated `terrazel.auto.tfvars.json`).
+                        path, plus a generated `terrazel.auto.tfvars.json`)
+                        and a validate stamp produced by running
+                        `tofu init -backend=false && tofu validate` at build
+                        time, so `bazel build :<name>` exercises validation.
   - `:<name>.plan`    — runnable: `bazel run :<name>.plan`
   - `:<name>.apply`   — runnable: `bazel run :<name>.apply`
   - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
   - `:<name>.fmt`     — runnable: `bazel run :<name>.fmt`
 
 When enabled (default):
-  - `:<name>.validate`   — test: `bazel test :<name>.validate` (validate_test=True)
   - `:<name>.fmt_check`  — test: `bazel test :<name>.fmt_check` (fmt_test=True)
 
 Materialization happens at analysis time via `ctx.actions.symlink` (one
@@ -20,64 +22,20 @@ invokes `tofu init && tofu <plan|apply>` against it. Nothing is
 mktemp'd; nothing is symlinked from bash.
 """
 
+load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
-load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
-load(":runner.bzl", _tf_runner = "tf_runner", _tf_validate_test = "tf_validate_test")
+load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
+load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo", "TerraformProviderInfo")
+load(":runner.bzl", _tf_runner = "tf_runner")
+load(
+    ":work_tree.bzl",
+    "PLUGIN_DIR_RELPATH",
+    _materialize = "materialize",
+    _materialize_plugin_tree = "materialize_plugin_tree",
+    _work_tree_root = "work_tree_root",
+)
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
-
-def _materialize(ctx, entries, tfvars_content):
-    """Materialize the work tree under `<pkg>/<name>.work/`.
-
-    For each `struct(path, file)`, declares `<name>.work/<path>` and
-    symlinks it to `file`. Then writes
-    `<name>.work/<package>/terrazel.auto.tfvars.json` from
-    `tfvars_content`.
-
-    Returns the list of declared output Files.
-    """
-    work_prefix = ctx.label.name + ".work"
-    outputs = []
-    seen = {}
-    for entry in entries:
-        path = entry.path
-        if path.startswith("../"):
-            fail(
-                "terraform_deploy `{}` would include `{}` from an external ".format(
-                    ctx.label,
-                    entry.file.path,
-                ) + "Bazel module. Terraform has no addressing scheme for files outside " +
-                "the workspace root, so this is not supported. Bring the file " +
-                "in-workspace (e.g. via a `genrule` or a local copy) and depend on that instead.",
-            )
-        if path in seen:
-            other = seen[path]
-            if other != entry.file:
-                fail(
-                    "File collision at workspace path `{}` between `{}` and `{}`. ".format(
-                        path,
-                        other.path,
-                        entry.file.path,
-                    ) + "Two libraries are contributing different content at the same path.",
-                )
-            continue
-        seen[path] = entry.file
-        out = ctx.actions.declare_file(work_prefix + "/" + path)
-        ctx.actions.symlink(output = out, target_file = entry.file)
-        outputs.append(out)
-
-    tfvars_path = work_prefix + "/" + ctx.label.package + "/terrazel.auto.tfvars.json"
-    if tfvars_path[len(work_prefix) + 1:] in seen:
-        fail(
-            "`{}` collides with the generated terrazel.auto.tfvars.json. ".format(
-                seen[tfvars_path[len(work_prefix) + 1:]].path,
-            ) + "Rename or remove that file; deploy `vars` is the sole producer of tfvars.",
-        )
-    tfvars_file = ctx.actions.declare_file(tfvars_path)
-    ctx.actions.write(output = tfvars_file, content = tfvars_content)
-    outputs.append(tfvars_file)
-
-    return outputs
 
 def _terraform_deploy_impl(ctx):
     direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs + ctx.files.data]
@@ -90,20 +48,39 @@ def _terraform_deploy_impl(ctx):
         indent = "  ",
     )
 
-    outputs = _materialize(ctx, entries, tfvars_content)
+    outputs = _materialize(ctx, entries, tfvars_content = tfvars_content)
+
+    # Aggregate providers: direct + transitive via library deps.
+    direct_providers = [p[TerraformProviderInfo] for p in ctx.attr.providers]
+    transitive_provider_sets = [
+        d[TerraformLibraryInfo].providers
+        for d in ctx.attr.deps
+    ]
+    providers_depset = depset(direct = direct_providers, transitive = transitive_provider_sets)
+    plugin_outputs = _materialize_plugin_tree(ctx, providers_depset)
+    outputs = outputs + plugin_outputs
 
     # The work tree root is the parent dir of every output. We expose
     # the first output as `work_tree`; the runner derives the root from
     # it via dirname-walking up to `<name>.work/`.
     work_tree_files = depset(direct = outputs)
 
+    validate_stamp = _tf_init_validate(
+        ctx,
+        work_tree_files = work_tree_files,
+        work_tree_root = _work_tree_root(ctx),
+        package_dir = ctx.label.package,
+        plugin_dir_relpath = PLUGIN_DIR_RELPATH,
+    )
+
     return [
-        DefaultInfo(files = work_tree_files),
+        DefaultInfo(files = depset(direct = [validate_stamp], transitive = [work_tree_files])),
         TerraformDeployInfo(
             work_tree = outputs[0],
             work_tree_files = work_tree_files,
             package_dir = ctx.label.package,
             var_file_relpaths = [f.short_path for f in ctx.files.var_files],
+            plugin_dir_relpath = PLUGIN_DIR_RELPATH,
         ),
     ]
 
@@ -132,22 +109,31 @@ terraform_deploy_rule = rule(
             doc = "Arbitrary files to include in the work tree. " +
                   "Use to expose files for `file()` calls in Terraform configs.",
         ),
+        "providers": attr.label_list(
+            providers = [TerraformProviderInfo],
+            doc = "Vendored OpenTofu/Terraform providers this deploy declares directly. " +
+                  "Unioned with providers contributed transitively by `deps`. " +
+                  "Each entry is typically a `@<repo>//:provider` target exposed by " +
+                  "`terraform_providers.provider(...)` in MODULE.bazel.",
+        ),
     },
+    toolchains = [TOOLCHAIN_TYPE],
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, validate_test = True, fmt_test = True, **kwargs):
+def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, providers = None, fmt_test = True, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
     Always generates:
-      - `:<name>`         — data target (the materialized work tree).
+      - `:<name>`         — data target. Building it materializes the work tree
+                            and runs `tofu init -backend=false && tofu validate`
+                            against it, so `bazel build :<name>` validates.
       - `:<name>.plan`    — `bazel run` to produce a plan.
       - `:<name>.apply`   — `bazel run` to apply.
       - `:<name>.destroy` — `bazel run` to destroy all managed resources.
       - `:<name>.fmt`     — `bazel run` to reformat .tf files in-place.
 
     When enabled (default True):
-      - `:<name>.validate`  — `bazel test` to validate the configuration (validate_test=True).
       - `:<name>.fmt_check` — `bazel test` that fails if files are not formatted (fmt_test=True).
 
     Args:
@@ -160,7 +146,11 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
           with vars or other var_files entries; duplicate keys are caught at runtime.
       data: arbitrary files to include in the work tree, enabling `file()` calls
           in Terraform configs.
-      validate_test: whether to emit a `:<name>.validate` test target (default True).
+      providers: `terraform_provider` targets (typically `@<repo>//:provider` exposed
+          by `terraform_providers.provider(...)` in MODULE.bazel) declared at the deploy
+          level. Unioned with providers transitively contributed by `deps`. The exec
+          platform binary is symlinked into the work tree's plugin dir; `tofu init`
+          runs offline against it.
       fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
@@ -176,6 +166,7 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         vars = vars or {},
         var_files = var_files or [],
         data = data or [],
+        providers = providers or [],
         **dict(common_kwargs, **kwargs)
     )
 
@@ -199,15 +190,6 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         command = "destroy",
         **common_kwargs
     )
-
-    if validate_test:
-        # TODO: drop requires-network once hermetic provider vendoring is implemented
-        #       (tofu init currently downloads providers at test time).
-        _tf_validate_test(
-            name = name + ".validate",
-            work_tree = ":" + name,
-            tags = ["requires-network"],
-        )
 
     _tf_fmt(name = name + ".fmt")
     if fmt_test:

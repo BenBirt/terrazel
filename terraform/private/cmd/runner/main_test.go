@@ -136,10 +136,13 @@ func setup(t *testing.T, vars map[string]any) (
 		return parseInvocations(data)
 	}
 
+	pluginDir := filepath.Join(workTree, pkgDir, ".terrazel-plugins")
+
 	cmd = exec.Command(bin,
 		"--tofu="+fakeTofuSh,
 		"--work-tree="+workTree,
 		"--package-dir="+pkgDir,
+		"--plugin-dir="+pluginDir,
 		"--state-dir="+filepath.Join(dir, "state"),
 		"--command=plan",
 	)
@@ -160,8 +163,15 @@ func TestRunner_NoVarFiles(t *testing.T) {
 	if len(invs) != 2 {
 		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
 	}
-	if !invs[0].hasArg("init") {
-		t.Errorf("first invocation should be 'init', got args: %v", invs[0].args)
+	init := invs[0]
+	if !init.hasArg("init") {
+		t.Errorf("first invocation should be 'init', got args: %v", init.args)
+	}
+	if !init.hasArg("-input=false") {
+		t.Errorf("init invocation missing -input=false, got args: %v", init.args)
+	}
+	if !init.hasArgWithPrefix("-plugin-dir=") {
+		t.Errorf("init invocation missing -plugin-dir=, got args: %v", init.args)
 	}
 	plan := invs[1]
 	if !plan.hasArg("plan") {
@@ -320,91 +330,6 @@ func TestRunner_ExtraArgsPassedToDestroy(t *testing.T) {
 	}
 	if !destroy.hasArg("--target=aws_instance.foo") {
 		t.Errorf("destroy invocation missing extra arg, got args: %v", destroy.args)
-	}
-}
-
-func TestRunner_Validate(t *testing.T) {
-	bin := runnerBin(t)
-	dir := t.TempDir()
-
-	logPath := filepath.Join(dir, "tofu-invocations.log")
-	fakeTofuSh := filepath.Join(dir, "tofu.sh")
-	script := "#!/bin/sh\n" +
-		"{ printf 'cwd=%s\\n' \"$(pwd)\"; for a in \"$@\"; do printf 'arg=%s\\n' \"$a\"; done; printf -- '---\\n'; } >> \"$TOFU_LOG\"\n" +
-		"exit 0\n"
-	if err := os.WriteFile(fakeTofuSh, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	workTree := filepath.Join(dir, "work")
-	const pkgDir = "mypkg"
-	if err := os.MkdirAll(filepath.Join(workTree, pkgDir), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(workTree, pkgDir, "main.tf"), []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	testTmpDir := filepath.Join(dir, "test_tmp")
-	if err := os.MkdirAll(testTmpDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := exec.Command(bin,
-		"--tofu="+fakeTofuSh,
-		"--work-tree="+workTree,
-		"--package-dir="+pkgDir,
-		"--command=validate",
-	)
-	// Filter out vars that must not bleed in from the outer Bazel test environment.
-	env := make([]string, 0, len(os.Environ()))
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "BUILD_WORKSPACE_DIRECTORY=") &&
-			!strings.HasPrefix(e, "TEST_TMPDIR=") {
-			env = append(env, e)
-		}
-	}
-	cmd.Env = append(env,
-		"TEST_TMPDIR="+testTmpDir,
-		"TOFU_LOG="+logPath,
-	)
-
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
-	}
-
-	data, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read tofu invocation log: %v", err)
-	}
-	invs := parseInvocations(data)
-
-	// Expect: init -backend=false, validate.
-	if len(invs) != 2 {
-		t.Fatalf("expected 2 tofu invocations (init, validate), got %d: %+v", len(invs), invs)
-	}
-	if !invs[0].hasArg("init") {
-		t.Errorf("first invocation should be 'init', got args: %v", invs[0].args)
-	}
-	if !invs[0].hasArg("-backend=false") {
-		t.Errorf("init should have -backend=false, got args: %v", invs[0].args)
-	}
-	if !invs[1].hasArg("validate") {
-		t.Errorf("second invocation should be 'validate', got args: %v", invs[1].args)
-	}
-
-	// Both invocations should run inside the copied work tree, not the original.
-	wantCwd := filepath.Join(testTmpDir, "work", pkgDir)
-	if invs[0].cwd != wantCwd {
-		t.Errorf("init cwd = %q, want %q", invs[0].cwd, wantCwd)
-	}
-	if invs[1].cwd != wantCwd {
-		t.Errorf("validate cwd = %q, want %q", invs[1].cwd, wantCwd)
-	}
-
-	// The work tree should have been copied into TEST_TMPDIR.
-	if _, err := os.Stat(filepath.Join(testTmpDir, "work", pkgDir, "main.tf")); err != nil {
-		t.Errorf("expected copied main.tf to exist: %v", err)
 	}
 }
 

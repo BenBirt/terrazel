@@ -7,6 +7,10 @@
 //   - Run `tofu init` inside the pre-materialized work tree.
 //   - For plan: emit a plan artifact and stop.
 //   - For apply/destroy: delegate to tofu, passing through any extra args.
+//
+// Configuration validation (`tofu init -backend=false && tofu validate`)
+// happens at `bazel build` time via the deploy rule's TofuValidate action,
+// not here.
 package main
 
 import (
@@ -36,12 +40,13 @@ func stringListFlag(name, usage string) *stringList {
 var (
 	workTree   = flag.String("work-tree", "", "path to the materialized work tree root")
 	packageDir = flag.String("package-dir", "", "workspace-relative dir to cd into within the work tree")
+	pluginDir  = flag.String("plugin-dir", "", "absolute path to the vendored provider plugin tree, passed to tofu init via -plugin-dir")
 	varFiles   = stringListFlag("var-file", "path to a .tfvars.json file passed to tofu via -var-file (repeatable)")
 
-	stateDir = flag.String("state-dir", "", "absolute path to the per-deploy state directory (not used for validate)")
+	stateDir = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
 
 	tofu    = flag.String("tofu", "", "path to the tofu binary")
-	command = flag.String("command", "", `"plan", "apply", "destroy", or "validate"`)
+	command = flag.String("command", "", `"plan", "apply", or "destroy"`)
 )
 
 func main() {
@@ -67,28 +72,25 @@ func run() error {
 		"--work-tree":   *workTree,
 		"--package-dir": *packageDir,
 		"--command":     *command,
+		"--state-dir":   *stateDir,
+		"--plugin-dir":  *pluginDir,
 	} {
 		if value == "" {
 			return fmt.Errorf("%s is required", name)
 		}
 	}
-	if *command != "plan" && *command != "apply" && *command != "destroy" && *command != "validate" {
-		return fmt.Errorf(`--command must be "plan", "apply", "destroy", or "validate", got %q`, *command)
-	}
-	if *command != "validate" && *stateDir == "" {
-		return fmt.Errorf("--state-dir is required")
+	if *command != "plan" && *command != "apply" && *command != "destroy" {
+		return fmt.Errorf(`--command must be "plan", "apply", or "destroy", got %q`, *command)
 	}
 
-	if *command != "validate" {
-		if os.Getenv("BUILD_WORKSPACE_DIRECTORY") == "" {
-			return errors.New(
-				"terrazel runner must be invoked via `bazel run`. " +
-					"BUILD_WORKSPACE_DIRECTORY is unset, so state cannot be persisted.",
-			)
-		}
-		if err := os.MkdirAll(*stateDir, 0o755); err != nil {
-			return fmt.Errorf("create %s: %w", *stateDir, err)
-		}
+	if os.Getenv("BUILD_WORKSPACE_DIRECTORY") == "" {
+		return errors.New(
+			"terrazel runner must be invoked via `bazel run`. " +
+				"BUILD_WORKSPACE_DIRECTORY is unset, so state cannot be persisted.",
+		)
+	}
+	if err := os.MkdirAll(*stateDir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", *stateDir, err)
 	}
 
 	cwd := filepath.Join(*workTree, *packageDir)
@@ -103,47 +105,32 @@ func run() error {
 	// approval prompt must remain reachable.
 	env := append(os.Environ(), "TF_IN_AUTOMATION=1")
 
-	var (
-		planFile    string
-		stateArgs   []string
-		varFileArgs []string
-	)
-	if *command != "validate" {
-		if err := checkVarFileDuplicates(cwd, *varFiles); err != nil {
-			return err
-		}
-		if err := runTofu(env, cwd, "init", "-input=false"); err != nil {
-			return fmt.Errorf("tofu init: %w", err)
-		}
-		planFile = filepath.Join(*stateDir, "tfplan")
-		stateFile := filepath.Join(*stateDir, "terraform.tfstate")
-		stateArgs = []string{"-state=" + stateFile, "-state-out=" + stateFile}
-		if hasBackend(cwd) {
-			stateArgs = nil
-		}
-		varFileArgs = make([]string, len(*varFiles))
-		for i, f := range *varFiles {
-			varFileArgs[i] = "-var-file=" + f
-		}
+	if err := checkVarFileDuplicates(cwd, *varFiles); err != nil {
+		return err
+	}
+	// Ensure the vendored plugin tree exists even when zero providers are in
+	// scope (the deploy declares no symlinks under .terrazel-plugins/ in that
+	// case, so the runfiles tree lacks the directory). -plugin-dir overrides
+	// all default plugin search paths and prevents the registry from being
+	// contacted at runtime.
+	if err := os.MkdirAll(*pluginDir, 0o755); err != nil {
+		return fmt.Errorf("create plugin dir %s: %w", *pluginDir, err)
+	}
+	if err := runTofu(env, cwd, "init", "-input=false", "-plugin-dir="+*pluginDir); err != nil {
+		return fmt.Errorf("tofu init: %w", err)
+	}
+	planFile := filepath.Join(*stateDir, "tfplan")
+	stateFile := filepath.Join(*stateDir, "terraform.tfstate")
+	stateArgs := []string{"-state=" + stateFile, "-state-out=" + stateFile}
+	if hasBackend(cwd) {
+		stateArgs = nil
+	}
+	varFileArgs := make([]string, len(*varFiles))
+	for i, f := range *varFiles {
+		varFileArgs[i] = "-var-file=" + f
 	}
 
 	switch *command {
-	case "validate":
-		testTmpDir := os.Getenv("TEST_TMPDIR")
-		if testTmpDir == "" {
-			return errors.New("TEST_TMPDIR is not set; tofu validate must run as a Bazel test")
-		}
-		workCopy := filepath.Join(testTmpDir, "work")
-		if err := copyDir(*workTree, workCopy); err != nil {
-			return fmt.Errorf("copy work tree: %w", err)
-		}
-		validateCwd := filepath.Join(workCopy, *packageDir)
-		if err := runTofu(env, validateCwd, "init", "-backend=false", "-input=false"); err != nil {
-			return fmt.Errorf("tofu init: %w", err)
-		}
-		if err := runTofu(env, validateCwd, "validate"); err != nil {
-			return fmt.Errorf("tofu validate: %w", err)
-		}
 	case "plan":
 		args := append([]string{"plan", "-input=false", "-out=" + planFile}, varFileArgs...)
 		args = append(args, stateArgs...)
@@ -168,29 +155,6 @@ func run() error {
 		}
 	}
 	return nil
-}
-
-// copyDir recursively copies src into dst, dereferencing symlinks.
-func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		// os.ReadFile follows symlinks, dereferencing the work tree's symlinked files.
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	})
 }
 
 // checkVarFileDuplicates errors if any variable key appears more than once across
