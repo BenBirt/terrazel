@@ -4,14 +4,16 @@ The macro always emits:
   - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
                         the materialized working tree (a symlink-mirror of
                         every transitive .tf input at its workspace-relative
-                        path, plus a generated `terrazel.auto.tfvars.json`).
+                        path, plus a generated `terrazel.auto.tfvars.json`)
+                        and a validate stamp produced by running
+                        `tofu init -backend=false && tofu validate` at build
+                        time, so `bazel build :<name>` exercises validation.
   - `:<name>.plan`    — runnable: `bazel run :<name>.plan`
   - `:<name>.apply`   — runnable: `bazel run :<name>.apply`
   - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
   - `:<name>.fmt`     — runnable: `bazel run :<name>.fmt`
 
 When enabled (default):
-  - `:<name>.validate`   — test: `bazel test :<name>.validate` (validate_test=True)
   - `:<name>.fmt_check`  — test: `bazel test :<name>.fmt_check` (fmt_test=True)
 
 Materialization happens at analysis time via `ctx.actions.symlink` (one
@@ -20,9 +22,11 @@ invokes `tofu init && tofu <plan|apply>` against it. Nothing is
 mktemp'd; nothing is symlinked from bash.
 """
 
+load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
+load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
 load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo")
-load(":runner.bzl", _tf_runner = "tf_runner", _tf_validate_test = "tf_validate_test")
+load(":runner.bzl", _tf_runner = "tf_runner")
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
@@ -97,8 +101,20 @@ def _terraform_deploy_impl(ctx):
     # it via dirname-walking up to `<name>.work/`.
     work_tree_files = depset(direct = outputs)
 
+    work_tree_root = "{bin}/{pkg}/{name}.work".format(
+        bin = ctx.bin_dir.path,
+        pkg = ctx.label.package,
+        name = ctx.label.name,
+    )
+    validate_stamp = _tf_init_validate(
+        ctx,
+        work_tree_files = work_tree_files,
+        work_tree_root = work_tree_root,
+        package_dir = ctx.label.package,
+    )
+
     return [
-        DefaultInfo(files = work_tree_files),
+        DefaultInfo(files = depset(direct = [validate_stamp], transitive = [work_tree_files])),
         TerraformDeployInfo(
             work_tree = outputs[0],
             work_tree_files = work_tree_files,
@@ -133,21 +149,23 @@ terraform_deploy_rule = rule(
                   "Use to expose files for `file()` calls in Terraform configs.",
         ),
     },
+    toolchains = [TOOLCHAIN_TYPE],
     doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, validate_test = True, fmt_test = True, **kwargs):
+def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, fmt_test = True, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
     Always generates:
-      - `:<name>`         — data target (the materialized work tree).
+      - `:<name>`         — data target. Building it materializes the work tree
+                            and runs `tofu init -backend=false && tofu validate`
+                            against it, so `bazel build :<name>` validates.
       - `:<name>.plan`    — `bazel run` to produce a plan.
       - `:<name>.apply`   — `bazel run` to apply.
       - `:<name>.destroy` — `bazel run` to destroy all managed resources.
       - `:<name>.fmt`     — `bazel run` to reformat .tf files in-place.
 
     When enabled (default True):
-      - `:<name>.validate`  — `bazel test` to validate the configuration (validate_test=True).
       - `:<name>.fmt_check` — `bazel test` that fails if files are not formatted (fmt_test=True).
 
     Args:
@@ -160,7 +178,6 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
           with vars or other var_files entries; duplicate keys are caught at runtime.
       data: arbitrary files to include in the work tree, enabling `file()` calls
           in Terraform configs.
-      validate_test: whether to emit a `:<name>.validate` test target (default True).
       fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
@@ -199,15 +216,6 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         command = "destroy",
         **common_kwargs
     )
-
-    if validate_test:
-        # TODO: drop requires-network once hermetic provider vendoring is implemented
-        #       (tofu init currently downloads providers at test time).
-        _tf_validate_test(
-            name = name + ".validate",
-            work_tree = ":" + name,
-            tags = ["requires-network"],
-        )
 
     _tf_fmt(name = name + ".fmt")
     if fmt_test:

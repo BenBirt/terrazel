@@ -7,7 +7,6 @@ directly runnable; bind variable values and produce runnable
 load(":deploy.bzl", _terraform_deploy_rule = "terraform_deploy_rule")
 load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":providers.bzl", "TerraformLibraryInfo")
-load(":runner.bzl", _tf_validate_test = "tf_validate_test")
 
 # Only structural Terraform inputs are allowed in srcs. Variable values
 # come from `terraform_deploy(vars = {...})`; allowing `.tfvars[.json]`
@@ -67,15 +66,19 @@ deeply nested module, traverse with `../../...`.
 """,
 )
 
-def terraform_library(name, srcs = None, deps = None, data = None, validate_test = True, fmt_test = True, **kwargs):
+def terraform_library(name, srcs = None, deps = None, data = None, fmt_test = True, **kwargs):
     """A reusable bundle of OpenTofu/Terraform configuration files.
 
     Always generates:
-      - `:<name>`      — the library target (carries TerraformLibraryInfo).
-      - `:<name>.fmt`  — `bazel run` to reformat .tf files in-place.
+      - `:<name>`          — the library target (carries TerraformLibraryInfo).
+      - `:<name>.validate` — non-test build target. Building it materializes a
+                             work tree containing the library's transitive files
+                             and runs `tofu init -backend=false && tofu validate`
+                             against the library's package. Use
+                             `bazel build :<name>.validate` (no longer `bazel test`).
+      - `:<name>.fmt`      — `bazel run` to reformat .tf files in-place.
 
     When enabled (default True):
-      - `:<name>.validate`   — `bazel test` to run `tofu validate` (validate_test=True).
       - `:<name>.fmt_check`  — `bazel test` that fails if files are not formatted (fmt_test=True).
 
     Args:
@@ -83,7 +86,6 @@ def terraform_library(name, srcs = None, deps = None, data = None, validate_test
       srcs: source .tf/.tf.json/.tftpl/.hcl files.
       deps: other `terraform_library` targets to compose with.
       data: arbitrary files to include in the work tree for `file()` calls.
-      validate_test: whether to emit a `:<name>.validate` test target (default True).
       fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
@@ -100,26 +102,18 @@ def terraform_library(name, srcs = None, deps = None, data = None, validate_test
         **dict(common_kwargs, **kwargs)
     )
 
-    if validate_test:
-        # Private work tree for the validate test — not a meaningful standalone target.
-        _terraform_deploy_rule(
-            name = name + ".validate_dir",
-            srcs = [],
-            deps = [":" + name],
-            vars = {},
-            var_files = [],
-            data = [],
-            testonly = True,
-            visibility = ["//visibility:private"],
-        )
-
-        # TODO: drop requires-network once hermetic provider vendoring is implemented
-        #       (tofu init currently downloads providers at test time).
-        _tf_validate_test(
-            name = name + ".validate",
-            work_tree = ":" + name + ".validate_dir",
-            tags = ["requires-network"],
-        )
+    # Build-time validation: emit a thin deploy rooted at this package so its
+    # build action runs `tofu init -backend=false && tofu validate` against
+    # the library's transitive files.
+    _terraform_deploy_rule(
+        name = name + ".validate",
+        srcs = [],
+        deps = [":" + name],
+        vars = {},
+        var_files = [],
+        data = [],
+        **common_kwargs
+    )
 
     _tf_fmt(name = name + ".fmt")
     if fmt_test:

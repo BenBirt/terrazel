@@ -12,6 +12,9 @@ TofuInfo = provider(
     fields = {
         "binary": "File: the `tofu` executable.",
         "version": "string: the OpenTofu version, e.g. \"1.8.5\".",
+        "platform_key": "string: the `<os>_<arch>` platform key the toolchain was built for. " +
+                        "Build-time `tofu init` symlinks the matching `terraform_provider` " +
+                        "binary into the work tree's plugin dir using this key.",
     },
 )
 
@@ -19,6 +22,7 @@ def _opentofu_toolchain_impl(ctx):
     tofu_info = TofuInfo(
         binary = ctx.file.binary,
         version = ctx.attr.version,
+        platform_key = ctx.attr.platform_key,
     )
     return [
         platform_common.ToolchainInfo(tofu = tofu_info),
@@ -35,6 +39,12 @@ opentofu_toolchain = rule(
         "version": attr.string(
             mandatory = True,
             doc = "OpenTofu version this toolchain wraps, e.g. \"1.8.5\".",
+        ),
+        "platform_key": attr.string(
+            mandatory = True,
+            doc = "The `<os>_<arch>` platform key this toolchain targets " +
+                  "(e.g. `linux_amd64`). Used by build-time `tofu init` to " +
+                  "pick the matching `terraform_provider` binary.",
         ),
     },
     doc = "Bundles an OpenTofu binary for use by terrazel rules.",

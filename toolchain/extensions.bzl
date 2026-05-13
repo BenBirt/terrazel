@@ -51,8 +51,9 @@ opentofu_toolchain(
     name = "toolchain_impl",
     binary = "{binary}",
     version = "{version}",
+    platform_key = "{platform_key}",
 )
-""".format(binary = binary_name, version = version),
+""".format(binary = binary_name, version = version, platform_key = platform_key),
         executable = False,
     )
 
