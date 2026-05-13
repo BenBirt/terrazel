@@ -58,26 +58,28 @@ terraform_providers = use_extension(
     "terraform_providers",
 )
 terraform_providers.provider(
-    name = "tf_hashicorp_null",
-    source = "hashicorp/null",
-    version = "3.2.2",
+    name = "tf_hashicorp_aws",
+    source = "hashicorp/aws",
+    version = "5.70.0",
     sha256 = {
-        "linux_amd64":   "...",
-        "linux_arm64":   "...",
-        "darwin_amd64":  "...",
-        "darwin_arm64":  "...",
+        "linux_amd64":   "ef2a61e8112c3b5e70095508aadaadf077e904b62b9cfc22030337f773bba041",
+        "linux_arm64":   "19685d9f4c9ddcfa476a9a428c6c612be4a1b4e8e1198fbcbb76436b735284ee",
+        "darwin_amd64":  "79bf8fb8f37c308742e287694a9de081ff8502b065a390d1bcfbd241b4eca203",
+        "darwin_arm64":  "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
     },
 )
-use_repo(terraform_providers, "tf_hashicorp_null")
+use_repo(terraform_providers, "tf_hashicorp_aws")
 ```
 
 ```python
 terraform_library(
-    name = "network",
-    srcs = ["network.tf"],
-    providers = ["@tf_hashicorp_null//:provider"],
+    name = "s3_bucket_lib",
+    srcs = ["main.tf"],
+    providers = ["@tf_hashicorp_aws//:provider"],
 )
 ```
+
+See `examples/aws/` and `examples/gcp/` for full end-to-end uses.
 
 A `terraform_deploy` may declare its own `providers = [...]`; the union
 of a deploy's direct providers and the providers contributed by its
