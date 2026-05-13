@@ -32,7 +32,6 @@ def _tf_runner_impl(ctx):
 
     runner_rel = _runfiles_path(workspace_name, runner_bin)
     tofu_rel = _runfiles_path(workspace_name, tofu.binary)
-    work_tree_rel = _runfiles_path(workspace_name, deploy.work_tree)
 
     # The work tree root in runfiles is `<workspace>/<pkg>/<name>.work`,
     # because the deploy's outputs are declared at
@@ -72,6 +71,7 @@ exec "$R/{runner}" \\
     --tofu="$R/{tofu}" \\
     --work-tree="$R/{work_tree}" \\
     --package-dir="{pkg}" \\
+    --plugin-dir="$R/{work_tree}/{plugin_rel}" \\
     --state-dir="${{BUILD_WORKSPACE_DIRECTORY:?must be invoked via 'bazel run'}}/{state_dir_rel}" \\
     --command="{command}" \\
 {var_file_flags}    -- "$@"
@@ -80,6 +80,7 @@ exec "$R/{runner}" \\
             tofu = tofu_rel,
             work_tree = work_tree_root,
             pkg = deploy.package_dir,
+            plugin_rel = deploy.plugin_dir_relpath,
             state_dir_rel = state_dir_rel,
             command = ctx.attr.command,
             var_file_flags = var_file_flags,

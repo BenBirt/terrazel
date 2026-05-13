@@ -136,10 +136,13 @@ func setup(t *testing.T, vars map[string]any) (
 		return parseInvocations(data)
 	}
 
+	pluginDir := filepath.Join(workTree, pkgDir, ".terrazel-plugins")
+
 	cmd = exec.Command(bin,
 		"--tofu="+fakeTofuSh,
 		"--work-tree="+workTree,
 		"--package-dir="+pkgDir,
+		"--plugin-dir="+pluginDir,
 		"--state-dir="+filepath.Join(dir, "state"),
 		"--command=plan",
 	)
@@ -160,8 +163,15 @@ func TestRunner_NoVarFiles(t *testing.T) {
 	if len(invs) != 2 {
 		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
 	}
-	if !invs[0].hasArg("init") {
-		t.Errorf("first invocation should be 'init', got args: %v", invs[0].args)
+	init := invs[0]
+	if !init.hasArg("init") {
+		t.Errorf("first invocation should be 'init', got args: %v", init.args)
+	}
+	if !init.hasArg("-input=false") {
+		t.Errorf("init invocation missing -input=false, got args: %v", init.args)
+	}
+	if !init.hasArgWithPrefix("-plugin-dir=") {
+		t.Errorf("init invocation missing -plugin-dir=, got args: %v", init.args)
 	}
 	plan := invs[1]
 	if !plan.hasArg("plan") {

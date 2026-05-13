@@ -40,6 +40,7 @@ func stringListFlag(name, usage string) *stringList {
 var (
 	workTree   = flag.String("work-tree", "", "path to the materialized work tree root")
 	packageDir = flag.String("package-dir", "", "workspace-relative dir to cd into within the work tree")
+	pluginDir  = flag.String("plugin-dir", "", "absolute path to the vendored provider plugin tree, passed to tofu init via -plugin-dir")
 	varFiles   = stringListFlag("var-file", "path to a .tfvars.json file passed to tofu via -var-file (repeatable)")
 
 	stateDir = flag.String("state-dir", "", "absolute path to the per-deploy state directory")
@@ -72,6 +73,7 @@ func run() error {
 		"--package-dir": *packageDir,
 		"--command":     *command,
 		"--state-dir":   *stateDir,
+		"--plugin-dir":  *pluginDir,
 	} {
 		if value == "" {
 			return fmt.Errorf("%s is required", name)
@@ -106,7 +108,15 @@ func run() error {
 	if err := checkVarFileDuplicates(cwd, *varFiles); err != nil {
 		return err
 	}
-	if err := runTofu(env, cwd, "init", "-input=false"); err != nil {
+	// Ensure the vendored plugin tree exists even when zero providers are in
+	// scope (the deploy declares no symlinks under .terrazel-plugins/ in that
+	// case, so the runfiles tree lacks the directory). -plugin-dir overrides
+	// all default plugin search paths and prevents the registry from being
+	// contacted at runtime.
+	if err := os.MkdirAll(*pluginDir, 0o755); err != nil {
+		return fmt.Errorf("create plugin dir %s: %w", *pluginDir, err)
+	}
+	if err := runTofu(env, cwd, "init", "-input=false", "-plugin-dir="+*pluginDir); err != nil {
 		return fmt.Errorf("tofu init: %w", err)
 	}
 	planFile := filepath.Join(*stateDir, "tfplan")
