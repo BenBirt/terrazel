@@ -64,6 +64,7 @@ use_repo(terraform_providers, "tf_hashicorp_aws", "tf_hashicorp_google")
 # Bazel repo (has its own MODULE.bazel) so its intentionally-failing
 # case targets are not reached by `//...` here.
 bazel_dep(name = "rules_bazel_integration_test", version = "0.37.1", dev_dependency = True)
+bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
 
 bazel_binaries = use_extension(
     "@rules_bazel_integration_test//:extensions.bzl",

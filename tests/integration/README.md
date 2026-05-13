@@ -23,8 +23,6 @@ tests/integration/
 
 ## Running
 
-In CI (and any environment with outbound network):
-
 ```sh
 bazel test //tests/integration:all
 ```
@@ -32,10 +30,6 @@ bazel test //tests/integration:all
 Each test spawns a nested Bazel that materializes the case's work tree,
 runs `tofu init/validate` (or the dupcheck action), and the driver
 checks the failure mode.
-
-In a network-restricted sandbox the nested Bazel will fail to fetch its
-own dependencies — same constraint as the top-level `bazel build //...`.
-No special tag gates these tests; they just won't pass without network.
 
 ## Adding a case
 
