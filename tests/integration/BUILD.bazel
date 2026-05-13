@@ -3,10 +3,9 @@ fails with a stable, user-visible error message.
 
 Each case names a target inside the sub-workspace under
 `broken_workspace/cases/<case>/` and a short stderr fragment expected
-when `bazel build :<target>` fails. The case BUILD and MODULE files
-ship as `*.tpl` so the outer Bazel never analyzes them; the test driver
-materializes the real filenames inside the staged workspace just before
-invoking the nested Bazel.
+when `bazel build :<target>` fails. The sub-workspace's own MODULE.bazel
+makes it a separate repo from the outer Bazel's perspective, so its
+intentionally-failing targets aren't reached by `//...` here.
 """
 
 load("@bazel_binaries//:defs.bzl", "bazel_binaries")

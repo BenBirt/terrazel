@@ -1,10 +1,11 @@
 """Module declaration for the nested Bazel invocation used by the negative
 integration tests.
 
-Consumes terrazel via `local_path_override` so each case's BUILD file
-(staged at test time from BUILD.tpl — see tests/integration/README.md)
-looks exactly like a downstream user's, except that it is supposed to
-fail in a specific, asserted way.
+This MODULE.bazel marks the directory as a separate Bazel repo, so the
+outer terrazel Bazel does not descend into `cases/*` when expanding
+`//...`. The nested Bazel consumes terrazel via `local_path_override`,
+so each case's BUILD looks exactly like a downstream user's except that
+it is supposed to fail in a specific, asserted way.
 """
 
 module(

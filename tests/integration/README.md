@@ -8,24 +8,18 @@ Bazel-in-Bazel tests that assert misuses of `terraform_library` /
 ```
 tests/integration/
 ├── BUILD.bazel              bazel_integration_test target per case
-├── assert_build_fails.sh    stages BUILD.bazel files from BUILD.tpl, runs
-                             the nested bazel, asserts non-zero exit and a
-                             stderr fragment match
-└── broken_workspace/        sub-workspace for the nested bazel
-    ├── MODULE.bazel.tpl
+├── assert_build_fails.sh    runs the nested bazel, asserts non-zero exit
+                             and a stderr fragment match
+└── broken_workspace/        sub-repo (its own MODULE.bazel) for the
+    │                        nested bazel; invisible to //... at the root
+    ├── MODULE.bazel
     ├── .bazelversion
     └── cases/
-        ├── duplicate_vars/{BUILD.tpl, main.tf, extra.tfvars.json}
-        ├── validate_fails/{BUILD.tpl, main.tf}
-        ├── missing_provider/{BUILD.tpl, main.tf}
-        └── lock_file_smuggled/{BUILD.tpl, main.tf, .terraform.lock.hcl}
+        ├── duplicate_vars/{BUILD.bazel, main.tf, extra.tfvars.json}
+        ├── validate_fails/{BUILD.bazel, main.tf}
+        ├── missing_provider/{BUILD.bazel, main.tf}
+        └── lock_file_smuggled/{BUILD.bazel, main.tf, .terraform.lock.hcl}
 ```
-
-BUILD and MODULE files ship with a `.tpl` extension so the outer terrazel
-Bazel never analyzes intentionally-failing targets or treats
-`broken_workspace/MODULE.bazel` as a repo-boundary marker. The test
-driver materializes the real filenames inside the staged workspace just
-before invoking the nested Bazel.
 
 ## Running
 
@@ -45,9 +39,8 @@ No special tag gates these tests; they just won't pass without network.
 
 ## Adding a case
 
-1. Create `broken_workspace/cases/<case>/` with a `BUILD.tpl` (note the
-   extension — *not* `BUILD.bazel`) that misuses the rules, plus any
-   fixture files the failure mode needs.
+1. Create `broken_workspace/cases/<case>/` with a `BUILD.bazel` that
+   misuses the rules, plus any fixture files the failure mode needs.
 2. Add a row to `_CASES` in `tests/integration/BUILD.bazel`:
    `("<case>", "//cases/<case>:<target>", "<stderr-fragment>")`.
 
