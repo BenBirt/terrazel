@@ -1,0 +1,4 @@
+# Per-workspace settings shared across contributors.
+# Session-specific overrides (e.g. proxy creds, registry mirrors) live in
+# `.bazelrc.local`, which is gitignored.
+try-import %workspace%/.bazelrc.local

@@ -206,9 +206,46 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//terraform/providers:extensions.bzl%terraform_providers": {
+      "general": {
+        "bzlTransitiveDigest": "r0C6asb0Lydm4ar3A4nkzdqebgnVh4INGr2cUqKS1xU=",
+        "usagesDigest": "94D1f5IBhZrmycRI8IeRuJYdpKJlXjrbzyDp8Ys7VDU=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "tf_hashicorp_aws": {
+            "repoRuleId": "@@//terraform/providers:extensions.bzl%_terraform_provider_download",
+            "attributes": {
+              "source": "hashicorp/aws",
+              "version": "5.70.0",
+              "sha256": {
+                "linux_amd64": "ef2a61e8112c3b5e70095508aadaadf077e904b62b9cfc22030337f773bba041",
+                "linux_arm64": "19685d9f4c9ddcfa476a9a428c6c612be4a1b4e8e1198fbcbb76436b735284ee",
+                "darwin_amd64": "79bf8fb8f37c308742e287694a9de081ff8502b065a390d1bcfbd241b4eca203",
+                "darwin_arm64": "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
+                "windows_amd64": "3358ee6a2b24c982b7c83fac0af6898644d1bbdabf9c4e0589e91e427641ba88"
+              }
+            }
+          },
+          "tf_hashicorp_google": {
+            "repoRuleId": "@@//terraform/providers:extensions.bzl%_terraform_provider_download",
+            "attributes": {
+              "source": "hashicorp/google",
+              "version": "5.45.0",
+              "sha256": {
+                "linux_amd64": "98803e908ddf283a6967cc213b34bf0c04ba866a02a3e516db6462053625aad5",
+                "linux_arm64": "4a8cb3569e5006da3bc631bc340f0c6020f3d6140c4eb5821d92d0ff23fde2dd",
+                "darwin_amd64": "813d3f741280a75baea1bfb0eeaaf4c2910218bd7e3607749a1a86d89a17c4dd",
+                "darwin_arm64": "bc47ab6583e549cd86f2fa6a69cdfdf85b795e1184b0e5e25b194bbf82377b32",
+                "windows_amd64": "d0a8e77af1f1a1fab9f7867cc8b2b700dd988398093a7a3e3273dac6875c161a"
+              }
+            }
+          }
+        }
+      }
+    },
     "//toolchain:extensions.bzl%tofu": {
       "general": {
-        "bzlTransitiveDigest": "dNiSPJOU0KkK1HVC6VrOQiAp3xU1LBqCx+6US5ZvN6k=",
+        "bzlTransitiveDigest": "Hxs+UIaP2e8zVe3qdvTkluHUe2G7GCMyR/kfigAEzLw=",
         "usagesDigest": "V+5VG7Q6hzUCmW2XPjhVteB48p171NWT59hNEyq2LgI=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

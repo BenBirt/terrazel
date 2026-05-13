@@ -23,3 +23,38 @@ tofu = use_extension("//toolchain:extensions.bzl", "tofu")
 use_repo(tofu, "tofu_toolchains")
 
 register_toolchains("@tofu_toolchains//:all")
+
+# Provider plugins pinned by sha256, downloaded once per workspace and vendored
+# into deploy work trees so `tofu init` runs fully offline. The downstream
+# `terraform_library` / `terraform_deploy` references `@<repo>//:provider`.
+# These declarations also drive the in-tree `examples/aws` and `examples/gcp`
+# targets; downstreams can drop them if they only need the toolchain.
+terraform_providers = use_extension("//terraform/providers:extensions.bzl", "terraform_providers")
+
+terraform_providers.provider(
+    name = "tf_hashicorp_aws",
+    source = "hashicorp/aws",
+    version = "5.70.0",
+    sha256 = {
+        "linux_amd64": "ef2a61e8112c3b5e70095508aadaadf077e904b62b9cfc22030337f773bba041",
+        "linux_arm64": "19685d9f4c9ddcfa476a9a428c6c612be4a1b4e8e1198fbcbb76436b735284ee",
+        "darwin_amd64": "79bf8fb8f37c308742e287694a9de081ff8502b065a390d1bcfbd241b4eca203",
+        "darwin_arm64": "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
+        "windows_amd64": "3358ee6a2b24c982b7c83fac0af6898644d1bbdabf9c4e0589e91e427641ba88",
+    },
+)
+
+terraform_providers.provider(
+    name = "tf_hashicorp_google",
+    source = "hashicorp/google",
+    version = "5.45.0",
+    sha256 = {
+        "linux_amd64": "98803e908ddf283a6967cc213b34bf0c04ba866a02a3e516db6462053625aad5",
+        "linux_arm64": "4a8cb3569e5006da3bc631bc340f0c6020f3d6140c4eb5821d92d0ff23fde2dd",
+        "darwin_amd64": "813d3f741280a75baea1bfb0eeaaf4c2910218bd7e3607749a1a86d89a17c4dd",
+        "darwin_arm64": "bc47ab6583e549cd86f2fa6a69cdfdf85b795e1184b0e5e25b194bbf82377b32",
+        "windows_amd64": "d0a8e77af1f1a1fab9f7867cc8b2b700dd988398093a7a3e3273dac6875c161a",
+    },
+)
+
+use_repo(terraform_providers, "tf_hashicorp_aws", "tf_hashicorp_google")

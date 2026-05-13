@@ -34,10 +34,11 @@ the download URL via `registry.terraform.io`'s download protocol; that can be
 added later behind a `url_template` attribute.
 """
 
-# Default plugin-dir host segment. Provider addresses in `required_providers`
-# default to `registry.terraform.io/<namespace>/<name>`; the canonical plugin
-# directory layout mirrors that path.
-_DEFAULT_HOST = "registry.terraform.io"
+# Default plugin-dir host segment. OpenTofu canonicalizes `source = "<ns>/<name>"`
+# in `required_providers` to `registry.opentofu.org/<ns>/<name>` and looks for
+# plugins under `<plugin-dir>/registry.opentofu.org/...`. terrazel uses OpenTofu,
+# so the vendored plugin tree mirrors that layout.
+_DEFAULT_HOST = "registry.opentofu.org"
 
 # (os/arch -> exe suffix). Keys must match the `sha256` map's platform keys.
 _EXE_SUFFIX = {
