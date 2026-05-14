@@ -22,11 +22,11 @@ jobs:
       - name: Build
         run: bazel build //...
 
-      - name: Prepare shared Bazel install base
-        run: cp -r "$(bazel info install_base)" /tmp/bazel_install
-
       - name: Test
         run: bazel test //... --test_output=errors --verbose_failures
+
+      - name: Integration tests
+        run: bazel test //tests/integration/... --test_output=errors --verbose_failures
 
       - name: Check for uncommitted changes
         run: |
