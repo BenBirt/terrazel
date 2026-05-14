@@ -360,50 +360,6 @@
         }
       }
     },
-    "@@rules_bazel_integration_test+//:extensions.bzl%bazel_binaries": {
-      "general": {
-        "bzlTransitiveDigest": "XC9nqZ31LIbq8N7cEK+rYa2iXNQLcJ3cyGWw+zPZlc0=",
-        "usagesDigest": "3nVFV/9JJqN5Ywv1xBGxJJZnV6qQDWZI+TFPG9sWswE=",
-        "recordedInputs": [
-          "REPO_MAPPING:rules_bazel_integration_test+,bazel_skylib bazel_skylib+",
-          "REPO_MAPPING:rules_bazel_integration_test+,cgrindel_bazel_starlib cgrindel_bazel_starlib+"
-        ],
-        "generatedRepoSpecs": {
-          "bazel_binaries_bazelisk": {
-            "repoRuleId": "@@rules_bazel_integration_test+//bazel_integration_test/private:bazel_binaries.bzl%bazelisk_binary",
-            "attributes": {
-              "version": "1.26.0"
-            }
-          },
-          "build_bazel_bazel_.bazelversion": {
-            "repoRuleId": "@@rules_bazel_integration_test+//bazel_integration_test/private:bazel_binaries.bzl%bazel_binary",
-            "attributes": {
-              "version_file": "@@//:.bazelversion",
-              "bazelisk": "@bazel_binaries_bazelisk//:bazelisk"
-            }
-          },
-          "bazel_binaries": {
-            "repoRuleId": "@@rules_bazel_integration_test+//bazel_integration_test/bzlmod:bazel_binaries.bzl%_bazel_binaries_helper",
-            "attributes": {
-              "version_to_repo": {
-                "'@@//:.bazelversion'": "build_bazel_bazel_.bazelversion"
-              },
-              "current_version": "'@@//:.bazelversion'"
-            }
-          }
-        },
-        "moduleExtensionMetadata": {
-          "explicitRootModuleDirectDeps": [],
-          "explicitRootModuleDirectDevDeps": [
-            "bazel_binaries_bazelisk",
-            "build_bazel_bazel_.bazelversion",
-            "bazel_binaries"
-          ],
-          "useAllRepos": "NO",
-          "reproducible": false
-        }
-      }
-    },
     "@@rules_kotlin+//src/main/starlark/core/repositories:bzlmod_setup.bzl%rules_kotlin_extensions": {
       "general": {
         "bzlTransitiveDigest": "Ga4z8lQy1YQ5rAMy+dOl0dqcCEBnYNCXku8x3YQmDZI=",

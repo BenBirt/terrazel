@@ -10,7 +10,6 @@ rules_bazel_integration_test), so the outer Bazel never analyzes the
 intentionally-broken case targets when expanding `//...`.
 """
 
-load("@bazel_binaries//:defs.bzl", "bazel_binaries")
 load(
     "@rules_bazel_integration_test//bazel_integration_test:defs.bzl",
     "bazel_integration_test",
@@ -21,6 +20,11 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 sh_binary(
     name = "assert_build_fails",
     srcs = ["assert_build_fails.sh"],
+)
+
+sh_binary(
+    name = "system_bazel",
+    srcs = ["system_bazel.sh"],
 )
 
 _CASES = [
@@ -34,15 +38,13 @@ _CASES = [
 [
     bazel_integration_test(
         name = case_name + "_test",
-        bazel_binaries = bazel_binaries,
-        bazel_version = bazel_binaries.versions.current,
+        bazel_binary = ":system_bazel",
         test_runner = ":assert_build_fails",
         workspace_files = integration_test_utils.glob_workspace_files("broken_workspace") + [
-        "//:local_repository_files",
-    ],
+            "//:local_repository_files",
+        ],
         tags = ["exclusive", "no-sandbox"],
         timeout = "moderate",
-        additional_env_inherit = ["BAZELISK_HOME"],
         workspace_path = "broken_workspace",
         env = {
             "TARGET": target,
