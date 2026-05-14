@@ -22,8 +22,8 @@ jobs:
       - name: Build
         run: bazel build //...
 
-      - name: Export Bazel install base
-        run: echo "BAZEL_INSTALL_BASE=$(bazel info install_base)" >> $GITHUB_ENV
+      - name: Prepare shared Bazel install base
+        run: cp -r "$(bazel info install_base)" /tmp/bazel_install
 
       - name: Test
         run: bazel test //... --test_output=errors --verbose_failures

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Wrapper that delegates to the system Bazel on PATH.
 #
-# If BAZEL_INSTALL_BASE is set (exported in CI from the outer Bazel),
-# reuse that install base so the inner Bazel skips the ~500MB extraction.
-# The inner Bazel still gets its own output base (via TEST_TMPDIR) so
-# there is no server conflict with the outer Bazel.
-if [[ -n "${BAZEL_INSTALL_BASE:-}" ]]; then
-  exec bazel --install_base="${BAZEL_INSTALL_BASE}" "$@"
+# On CI, the outer Bazel's extracted installation is copied to
+# /tmp/bazel_install before tests run.  Using --install_base points
+# the inner Bazel there, avoiding a slow re-extraction while keeping
+# a separate output base (no server conflict with the outer Bazel).
+if [[ -d /tmp/bazel_install ]]; then
+  exec bazel --install_base=/tmp/bazel_install "$@"
 else
   exec bazel "$@"
 fi
