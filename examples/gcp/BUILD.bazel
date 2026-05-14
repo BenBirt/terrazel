@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 terraform_library(
     name = "storage_bucket_lib",
     srcs = ["main.tf"],
-    providers = ["@tf_hashicorp_google//:provider"],
+    providers = ["@terraform_providers_hashicorp_google//:provider"],
 )
 
 # Root invocation that binds variable values. `bazel build :storage_bucket`

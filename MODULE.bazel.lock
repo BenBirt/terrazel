@@ -254,11 +254,11 @@
   "moduleExtensions": {
     "//terraform/providers:extensions.bzl%terraform_providers": {
       "general": {
-        "bzlTransitiveDigest": "Cp8nlxUdx0IoBN+mY47Ybv40ERs9YNvGK+57z6kpSTA=",
-        "usagesDigest": "94D1f5IBhZrmycRI8IeRuJYdpKJlXjrbzyDp8Ys7VDU=",
+        "bzlTransitiveDigest": "aoZJLpdsvYWD6/s5HVtlUz+M6c04tWMbsbeRKvyuZ8c=",
+        "usagesDigest": "bjT2Wuo9P5bpDIU62xkBvEcd6QN/rI0+/WFVkQAinyg=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
-          "tf_hashicorp_aws": {
+          "terraform_providers_hashicorp_aws": {
             "repoRuleId": "@@//terraform/providers:extensions.bzl%_terraform_provider_download",
             "attributes": {
               "source": "hashicorp/aws",
@@ -272,7 +272,7 @@
               }
             }
           },
-          "tf_hashicorp_google": {
+          "terraform_providers_hashicorp_google": {
             "repoRuleId": "@@//terraform/providers:extensions.bzl%_terraform_provider_download",
             "attributes": {
               "source": "hashicorp/google",

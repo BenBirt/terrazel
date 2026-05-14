@@ -50,7 +50,8 @@ terraform_deploy(
 ### Vendoring providers
 
 Provider plugins are pinned per-platform in `MODULE.bazel` and passed to
-the rules that use them:
+the rules that use them. The repository name is derived from `source`
+(e.g. `hashicorp/aws` → `@terraform_providers_hashicorp_aws`):
 
 ```python
 terraform_providers = use_extension(
@@ -58,7 +59,6 @@ terraform_providers = use_extension(
     "terraform_providers",
 )
 terraform_providers.provider(
-    name = "tf_hashicorp_aws",
     source = "hashicorp/aws",
     version = "5.70.0",
     sha256 = {
@@ -68,14 +68,18 @@ terraform_providers.provider(
         "darwin_arm64":  "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
     },
 )
-use_repo(terraform_providers, "tf_hashicorp_aws")
+use_repo(terraform_providers, "terraform_providers_hashicorp_aws")
 ```
+
+When multiple modules in the dependency graph request the same provider,
+the extension resolves to a single version: the root module's version wins
+if specified, otherwise the highest requested version is selected.
 
 ```python
 terraform_library(
     name = "s3_bucket_lib",
     srcs = ["main.tf"],
-    providers = ["@tf_hashicorp_aws//:provider"],
+    providers = ["@terraform_providers_hashicorp_aws//:provider"],
 )
 ```
 

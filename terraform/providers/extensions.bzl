@@ -10,7 +10,6 @@ Downstream usage in MODULE.bazel:
         "terraform_providers",
     )
     terraform_providers.provider(
-        name = "tf_hashicorp_aws",
         source = "hashicorp/aws",
         version = "5.70.0",
         sha256 = {
@@ -21,9 +20,26 @@ Downstream usage in MODULE.bazel:
             "windows_amd64": "...",
         },
     )
-    use_repo(terraform_providers, "tf_hashicorp_aws")
+    use_repo(terraform_providers, "terraform_providers_hashicorp_aws")
 
-The target `@tf_hashicorp_aws//:provider` then carries
+The repo name is derived deterministically from `source`: the `<ns>/<name>`
+pair becomes `terraform_providers_<ns>_<name>` (e.g. `hashicorp/aws` →
+`terraform_providers_hashicorp_aws`).
+Callers cannot override this name.
+
+When multiple modules in the dependency graph request the same provider (same
+`source`), the extension resolves to a single version:
+
+  1. If the **root module** specifies a version, that version wins.
+  2. Otherwise the **highest version** across all requesting modules wins
+     (simple integer-component semver comparison).
+
+For the winning version, `sha256` maps are unioned across all modules that
+declared that version. If two modules provide conflicting sha256 values for
+the same platform at the same version, the extension fails with a clear
+error.
+
+The target `@terraform_providers_<ns>_<name>//:provider` then carries
 `TerraformProviderInfo` and is passed to `terraform_library`/`terraform_deploy`
 via their `providers` attribute. Bazel's MODULE.bazel.lock pins the resolved
 SHAs, so the provider tree is reproducible and is fetched once per workspace.
@@ -64,6 +80,46 @@ def _split_platform_key(platform_key):
     if len(parts) != 2 or not parts[0] or not parts[1]:
         fail("provider platform key must be \"<os>_<arch>\", got {}".format(repr(platform_key)))
     return parts[0], parts[1]
+
+def _repo_name_from_source(source):
+    """Derive the canonical Bazel repository name from a provider source.
+
+    `hashicorp/aws` → `terraform_providers_hashicorp_aws`.
+    """
+    return "terraform_providers_" + source.replace("/", "_")
+
+def _parse_version(version):
+    """Parse a version string into a list of integers for comparison.
+
+    Handles standard semver `major.minor.patch`. Pre-release suffixes are
+    not supported and will cause a fail().
+    """
+    parts = version.split(".")
+    result = []
+    for part in parts:
+        if not part.isdigit():
+            fail("Cannot parse version component `{}` in version `{}`; only numeric components are supported".format(part, version))
+        result.append(int(part))
+    return result
+
+def _version_gt(a, b):
+    """Return True if version string `a` is strictly greater than `b`."""
+    pa = _parse_version(a)
+    pb = _parse_version(b)
+
+    # Pad the shorter list with zeros so [5, 70] and [5, 70, 0] compare equal.
+    max_len = max(len(pa), len(pb))
+    for _ in range(max_len - len(pa)):
+        pa.append(0)
+    for _ in range(max_len - len(pb)):
+        pb.append(0)
+
+    for i in range(max_len):
+        if pa[i] > pb[i]:
+            return True
+        if pa[i] < pb[i]:
+            return False
+    return False
 
 def _format_binaries_dict(entries):
     """Format `entries` as a Starlark dict literal for the generated BUILD.
@@ -209,10 +265,6 @@ _terraform_provider_download = repository_rule(
 
 _provider_tag = tag_class(
     attrs = {
-        "name": attr.string(
-            mandatory = True,
-            doc = "Bazel repo name to expose (used in MODULE.bazel's `use_repo(...)`).",
-        ),
         "source": attr.string(
             mandatory = True,
             doc = "Provider source in `<namespace>/<name>` form, e.g. \"hashicorp/aws\".",
@@ -231,22 +283,70 @@ _provider_tag = tag_class(
 )
 
 def _terraform_providers_extension_impl(module_ctx):
-    seen = {}
+    # Phase 1: Collect all provider tags into a flat list of structs,
+    # then group by source.
+    all_tags = []
     for mod in module_ctx.modules:
         for tag in mod.tags.provider:
-            if tag.name in seen:
-                fail("Duplicate terraform_providers.provider name `{}` (declared in modules `{}` and `{}`)".format(
-                    tag.name,
-                    seen[tag.name],
-                    mod.name,
-                ))
-            seen[tag.name] = mod.name
-            _terraform_provider_download(
-                name = tag.name,
+            all_tags.append(struct(
                 source = tag.source,
                 version = tag.version,
                 sha256 = tag.sha256,
-            )
+                is_root = mod.is_root,
+                mod_name = mod.name,
+            ))
+
+    by_source = {}
+    for t in all_tags:
+        if t.source not in by_source:
+            by_source[t.source] = []
+        by_source[t.source].append(t)
+
+    # Phase 2: Resolve each provider to a single (version, sha256) pair.
+    for source, tags in by_source.items():
+        # Validate: at most one root declaration per provider.
+        root_tags = [t for t in tags if t.is_root]
+        if len(root_tags) > 1:
+            fail("Root module declares provider `{}` more than once".format(source))
+
+        # Determine the winning version.
+        if root_tags:
+            # Root module wins unconditionally.
+            resolved_version = root_tags[0].version
+        else:
+            # Pick the highest version across all tags.
+            resolved_version = tags[0].version
+            for t in tags[1:]:
+                if _version_gt(t.version, resolved_version):
+                    resolved_version = t.version
+
+        # Merge sha256 maps from all tags that declared the winning version.
+        merged_sha256 = {}
+        for t in tags:
+            if t.version != resolved_version:
+                continue
+            for platform, digest in t.sha256.items():
+                if platform in merged_sha256 and merged_sha256[platform] != digest:
+                    fail(
+                        ("Provider `{}` version `{}`: modules disagree on sha256 for " +
+                         "platform `{}` (got `{}` and `{}`)").format(
+                            source,
+                            resolved_version,
+                            platform,
+                            merged_sha256[platform],
+                            digest,
+                        ),
+                    )
+                merged_sha256[platform] = digest
+
+        # Phase 3: Create the repository.
+        repo_name = _repo_name_from_source(source)
+        _terraform_provider_download(
+            name = repo_name,
+            source = source,
+            version = resolved_version,
+            sha256 = merged_sha256,
+        )
 
 terraform_providers = module_extension(
     implementation = _terraform_providers_extension_impl,

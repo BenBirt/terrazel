@@ -36,7 +36,6 @@ register_toolchains("@tofu_toolchains//:all")
 # `providers = [...]`, not because the provider itself is unknown.
 terraform_providers = use_extension("@terrazel//terraform/providers:extensions.bzl", "terraform_providers")
 terraform_providers.provider(
-    name = "tf_hashicorp_aws",
     source = "hashicorp/aws",
     version = "5.70.0",
     sha256 = {
@@ -47,4 +46,4 @@ terraform_providers.provider(
         "windows_amd64": "3358ee6a2b24c982b7c83fac0af6898644d1bbdabf9c4e0589e91e427641ba88",
     },
 )
-use_repo(terraform_providers, "tf_hashicorp_aws")
+use_repo(terraform_providers, "terraform_providers_hashicorp_aws")

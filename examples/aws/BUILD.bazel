@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 terraform_library(
     name = "s3_bucket_lib",
     srcs = ["main.tf"],
-    providers = ["@tf_hashicorp_aws//:provider"],
+    providers = ["@terraform_providers_hashicorp_aws//:provider"],
 )
 
 # Root invocation that binds variable values. `bazel build :s3_bucket` runs
