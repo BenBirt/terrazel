@@ -52,3 +52,9 @@ _CASES = [
     )
     for (case_name, target, pattern) in _CASES
 ]
+
+test_suite(
+    name = "integration_tests",
+    tags = integration_test_utils.DEFAULT_INTEGRATION_TEST_TAGS,
+    tests = [case_name + "_test" for (case_name, _, _) in _CASES],
+)
