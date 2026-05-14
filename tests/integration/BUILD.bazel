@@ -42,6 +42,7 @@ _CASES = [
     ],
         tags = ["exclusive", "no-sandbox"],
         timeout = "moderate",
+        additional_env_inherit = ["BAZELISK_HOME"],
         workspace_path = "broken_workspace",
         env = {
             "TARGET": target,
