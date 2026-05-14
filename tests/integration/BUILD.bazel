@@ -41,7 +41,7 @@ _CASES = [
         "//:local_repository_files",
     ],
         tags = ["exclusive", "no-sandbox"],
-        timeout = "long",
+        timeout = "medium",
         workspace_path = "broken_workspace",
         env = {
             "TARGET": target,

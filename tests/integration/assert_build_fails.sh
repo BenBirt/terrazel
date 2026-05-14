@@ -13,8 +13,11 @@ LOG="${TEST_TMPDIR:-/tmp}/build.log"
 
 cd "${BIT_WORKSPACE_DIR}"
 
-"${BIT_BAZEL_BINARY}" build "${TARGET}" >"${LOG}" 2>&1
+timeout 60 "${BIT_BAZEL_BINARY}" build "${TARGET}" >"${LOG}" 2>&1
 rc=$?
+if [[ ${rc} -eq 124 ]]; then
+  echo "TIMEOUT: nested 'bazel build ${TARGET}' killed after 60s" | tee -a "${LOG}" >&2
+fi
 "${BIT_BAZEL_BINARY}" clean --expunge
 "${BIT_BAZEL_BINARY}" shutdown
 
