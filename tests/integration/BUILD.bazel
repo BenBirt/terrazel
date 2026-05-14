@@ -3,11 +3,11 @@ fails with a stable, user-visible error message.
 
 Each case names a target inside the sub-workspace under
 `broken_workspace/cases/<case>/` and a short stderr fragment expected
-when `bazel build :<target>` fails. The case BUILD files and the
-sub-workspace MODULE.bazel ship with a `.tpl` extension so the outer
-Bazel never analyzes the broken targets when expanding `//...`; the
-test driver materializes the real filenames inside the staged workspace
-just before invoking the nested Bazel.
+when `bazel build :<target>` fails. The child workspace packages are
+excluded from the parent Bazel via the `--deleted_packages` flag in
+`.bazelrc` (the "deleted packages" trick recommended by
+rules_bazel_integration_test), so the outer Bazel never analyzes the
+intentionally-broken case targets when expanding `//...`.
 """
 
 load("@bazel_binaries//:defs.bzl", "bazel_binaries")

@@ -6,27 +6,12 @@
 #   EXPECTED_PATTERN   — substring expected in the failing build's stderr
 # We invoke the nested Bazel and assert: non-zero exit AND stderr contains
 # the expected fragment. Anything else is a test failure.
-#
-# The sub-workspace ships its BUILD and MODULE files with a `.tpl`
-# extension so the outer terrazel Bazel does not analyze the
-# intentionally-failing case targets when expanding `//...` here. We
-# materialize the real filenames just before invoking the nested Bazel.
 
 set -uo pipefail
 
 LOG="${TEST_TMPDIR:-/tmp}/build.log"
 
 cd "${BIT_WORKSPACE_DIR}"
-
-find . -name 'BUILD.tpl' -print0 |
-  while IFS= read -r -d '' tpl; do
-    cp "${tpl}" "$(dirname "${tpl}")/BUILD.bazel"
-  done
-
-find . -name 'MODULE.bazel.tpl' -print0 |
-  while IFS= read -r -d '' tpl; do
-    cp "${tpl}" "$(dirname "${tpl}")/MODULE.bazel"
-  done
 
 "${BIT_BAZEL_BINARY}" build "${TARGET}" >"${LOG}" 2>&1
 rc=$?

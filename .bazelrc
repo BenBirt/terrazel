@@ -2,3 +2,9 @@
 # Session-specific overrides (e.g. proxy creds, registry mirrors) live in
 # `.bazelrc.local`, which is gitignored.
 try-import %workspace%/.bazelrc.local
+
+# Force Bazel to ignore (intentionally broken) directories belonging to a child workspace.
+# To update these lines, execute 
+# `bazel run @rules_bazel_integration_test//tools:update_deleted_packages`
+build --deleted_packages=tests/integration/broken_workspace/cases/duplicate_vars,tests/integration/broken_workspace/cases/lock_file_smuggled,tests/integration/broken_workspace/cases/missing_provider,tests/integration/broken_workspace/cases/validate_fails
+query --deleted_packages=tests/integration/broken_workspace/cases/duplicate_vars,tests/integration/broken_workspace/cases/lock_file_smuggled,tests/integration/broken_workspace/cases/missing_provider,tests/integration/broken_workspace/cases/validate_fails
