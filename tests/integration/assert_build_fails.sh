@@ -18,8 +18,6 @@ rc=$?
 if [[ ${rc} -eq 124 ]]; then
   echo "TIMEOUT: nested 'bazel build ${TARGET}' killed after 60s" | tee -a "${LOG}" >&2
 fi
-"${BIT_BAZEL_BINARY}" clean --expunge
-"${BIT_BAZEL_BINARY}" shutdown
 
 if [[ ${rc} -eq 0 ]]; then
   echo "FAIL: build of ${TARGET} succeeded; expected failure" >&2
