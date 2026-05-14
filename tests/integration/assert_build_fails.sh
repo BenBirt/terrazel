@@ -30,6 +30,8 @@ find . -name 'MODULE.bazel.tpl' -print0 |
 
 "${BIT_BAZEL_BINARY}" build "${TARGET}" >"${LOG}" 2>&1
 rc=$?
+"${BIT_BAZEL_BINARY}" clean --expunge
+"${BIT_BAZEL_BINARY}" shutdown
 
 if [[ ${rc} -eq 0 ]]; then
   echo "FAIL: build of ${TARGET} succeeded; expected failure" >&2
