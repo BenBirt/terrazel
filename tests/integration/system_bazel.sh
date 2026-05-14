@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Wrapper that delegates to the system Bazel on PATH.
 #
-# Why unset TEST_TMPDIR?  Bazel's test runner sets a per-test TEST_TMPDIR,
-# which Bazel uses as the output base.  A fresh output base forces Bazel to
-# re-extract its ~500MB installation.  By unsetting TEST_TMPDIR the inner
-# Bazel reuses the default output_user_root (and therefore the install base)
-# that the outer CI Bazel has already populated.
-unset TEST_TMPDIR
-exec bazel "$@"
+# If BAZEL_INSTALL_BASE is set (exported in CI from the outer Bazel),
+# reuse that install base so the inner Bazel skips the ~500MB extraction.
+# The inner Bazel still gets its own output base (via TEST_TMPDIR) so
+# there is no server conflict with the outer Bazel.
+if [[ -n "${BAZEL_INSTALL_BASE:-}" ]]; then
+  exec bazel --install_base="${BAZEL_INSTALL_BASE}" "$@"
+else
+  exec bazel "$@"
+fi
