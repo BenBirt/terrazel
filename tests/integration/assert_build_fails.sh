@@ -38,14 +38,14 @@ trap dump_log EXIT
 
 # Diagnostics — these go to stderr so they appear in test output even on timeout.
 echo "=== assert_build_fails ===" >&2
-echo "  TARGET:           ${TARGET}" >&2
-echo "  EXPECTED_PATTERN: ${EXPECTED_PATTERN}" >&2
-echo "  BIT_BAZEL_BINARY: ${BIT_BAZEL_BINARY}" >&2
-echo "  BIT_WORKSPACE_DIR: ${BIT_WORKSPACE_DIR}" >&2
-echo "  TEST_TMPDIR:      ${_TMPDIR}" >&2
+echo "  TARGET:             ${TARGET}" >&2
+echo "  EXPECTED_PATTERN:   ${EXPECTED_PATTERN}" >&2
+echo "  BIT_BAZEL_BINARY:   ${BIT_BAZEL_BINARY}" >&2
+echo "  BIT_WORKSPACE_DIR:  ${BIT_WORKSPACE_DIR}" >&2
+echo "  TEST_TMPDIR:        ${_TMPDIR}" >&2
 echo "  NESTED_OUTPUT_BASE: ${NESTED_OUTPUT_BASE}" >&2
-echo "  PWD:              $(pwd)" >&2
-echo "  date:             $(date -u)" >&2
+echo "  PWD:                $(pwd)" >&2
+echo "  date:               $(date -u)" >&2
 
 cd "${BIT_WORKSPACE_DIR}"
 
