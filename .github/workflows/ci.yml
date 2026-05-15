@@ -25,6 +25,10 @@ jobs:
       - name: Test
         run: bazel test //... --test_output=errors --verbose_failures
 
+      - name: Fetch broken_workspace deps
+        run: bazel fetch //...
+        working-directory: tests/integration/broken_workspace
+
       - name: Integration tests
         run: bazel test //tests/integration:integration_tests --test_output=streamed --verbose_failures
 
@@ -32,16 +36,5 @@ jobs:
         run: |
           if ! git diff --exit-code; then
             echo "::error::Uncommitted changes detected after build/test (e.g. MODULE.bazel.lock). Please run the failing commands locally and commit the updated files."
-            exit 1
-          fi
-
-      - name: Fetch broken_workspace deps
-        run: bazel fetch //...
-        working-directory: tests/integration/broken_workspace
-
-      - name: Check for uncommitted changes (broken_workspace)
-        run: |
-          if ! git diff --exit-code; then
-            echo "::error::Uncommitted changes detected after fetching broken_workspace deps (e.g. MODULE.bazel.lock). Please run 'bazel fetch //...' in tests/integration/broken_workspace and commit the updated files."
             exit 1
           fi

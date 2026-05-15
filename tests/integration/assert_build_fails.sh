@@ -9,7 +9,14 @@
 
 set -uo pipefail
 
-LOG="${TEST_TMPDIR:-/tmp}/build.log"
+# Save TEST_TMPDIR for our log file, then unset it so the nested Bazel
+# uses the default output user root.  With TEST_TMPDIR set (the outer Bazel
+# sets this per-test), the nested Bazel would extract a fresh install base
+# into a throwaway temp dir — redundantly re-downloading and re-extracting
+# Bazel on every single test invocation.
+_TMPDIR="${TEST_TMPDIR:-/tmp}"
+LOG="${_TMPDIR}/build.log"
+unset TEST_TMPDIR
 
 # Ensure partial log is always visible, even when the test is killed by timeout.
 dump_log() {
@@ -29,7 +36,6 @@ echo "  TARGET:           ${TARGET}" >&2
 echo "  EXPECTED_PATTERN: ${EXPECTED_PATTERN}" >&2
 echo "  BIT_BAZEL_BINARY: ${BIT_BAZEL_BINARY}" >&2
 echo "  BIT_WORKSPACE_DIR: ${BIT_WORKSPACE_DIR}" >&2
-echo "  TEST_TMPDIR:      ${TEST_TMPDIR:-<unset>}" >&2
 echo "  PWD:              $(pwd)" >&2
 echo "  date:             $(date -u)" >&2
 
