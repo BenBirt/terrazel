@@ -11,6 +11,18 @@ set -uo pipefail
 
 LOG="${TEST_TMPDIR:-/tmp}/build.log"
 
+# Ensure partial log is always visible, even when the test is killed by timeout.
+dump_log() {
+  if [ -s "${LOG}" ]; then
+    echo "--- nested bazel log (${LOG}) ---" >&2
+    cat "${LOG}" >&2
+    echo "--- end nested bazel log ---" >&2
+  else
+    echo "--- nested bazel log is empty or missing ---" >&2
+  fi
+}
+trap dump_log EXIT
+
 # Diagnostics — these go to stderr so they appear in test output even on timeout.
 echo "=== assert_build_fails ===" >&2
 echo "  TARGET:           ${TARGET}" >&2
@@ -26,14 +38,15 @@ cd "${BIT_WORKSPACE_DIR}"
 echo "  workspace dir:    $(pwd)" >&2
 echo "--- starting nested bazel build at $(date -u) ---" >&2
 
-"${BIT_BAZEL_BINARY}" build "${TARGET}" >"${LOG}" 2>&1
-rc=$?
+# Use tee so nested Bazel output streams to stderr in real time (visible in
+# test logs) while also being captured in $LOG for the grep assertion below.
+"${BIT_BAZEL_BINARY}" build "${TARGET}" 2>&1 | tee "${LOG}" >&2
+rc=${PIPESTATUS[0]}
 
 echo "--- nested bazel build finished at $(date -u), exit code: ${rc} ---" >&2
 
 if [[ ${rc} -eq 0 ]]; then
   echo "FAIL: build of ${TARGET} succeeded; expected failure" >&2
-  cat "${LOG}" >&2
   exit 1
 fi
 
