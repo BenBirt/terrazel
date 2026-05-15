@@ -25,10 +25,6 @@ jobs:
       - name: Test
         run: bazel test //... --test_output=errors --verbose_failures
 
-      - name: Fetch broken_workspace deps
-        run: bazel fetch //...
-        working-directory: tests/integration/broken_workspace
-
       - name: Integration tests
         run: bazel test //tests/integration:integration_tests --test_output=streamed --verbose_failures
 
