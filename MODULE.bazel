@@ -25,14 +25,12 @@ use_repo(tofu, "tofu_toolchains")
 register_toolchains("@tofu_toolchains//:all")
 
 # Provider plugins pinned by sha256, downloaded once per workspace and vendored
-# into deploy work trees so `tofu init` runs fully offline. The downstream
-# `terraform_library` / `terraform_deploy` references `@<repo>//:provider`.
+# into deploy work trees so `tofu init` runs fully offline. Repo names are
+# derived from `source`: e.g. `hashicorp/aws` → `@terraform_providers_hashicorp_aws`.
 # These declarations also drive the in-tree `examples/aws` and `examples/gcp`
 # targets; downstreams can drop them if they only need the toolchain.
 terraform_providers = use_extension("//terraform/providers:extensions.bzl", "terraform_providers")
-
 terraform_providers.provider(
-    name = "tf_hashicorp_aws",
     source = "hashicorp/aws",
     version = "5.70.0",
     sha256 = {
@@ -43,9 +41,7 @@ terraform_providers.provider(
         "windows_amd64": "3358ee6a2b24c982b7c83fac0af6898644d1bbdabf9c4e0589e91e427641ba88",
     },
 )
-
 terraform_providers.provider(
-    name = "tf_hashicorp_google",
     source = "hashicorp/google",
     version = "5.45.0",
     sha256 = {
@@ -56,5 +52,16 @@ terraform_providers.provider(
         "windows_amd64": "d0a8e77af1f1a1fab9f7867cc8b2b700dd988398093a7a3e3273dac6875c161a",
     },
 )
+use_repo(terraform_providers, "terraform_providers_hashicorp_aws", "terraform_providers_hashicorp_google")
 
-use_repo(terraform_providers, "tf_hashicorp_aws", "tf_hashicorp_google")
+# Bazel-in-Bazel integration tests under //tests/integration.
+bazel_dep(name = "rules_bazel_integration_test", version = "0.37.1", dev_dependency = True)
+bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
+
+bazel_binaries = use_extension(
+    "@rules_bazel_integration_test//:extensions.bzl",
+    "bazel_binaries",
+    dev_dependency = True,
+)
+bazel_binaries.download(version_file = "//:.bazelversion")
+use_repo(bazel_binaries, "bazel_binaries", "bazel_binaries_bazelisk", "build_bazel_bazel_.bazelversion")

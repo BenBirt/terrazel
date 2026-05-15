@@ -1,0 +1,52 @@
+"""Bazel-in-Bazel negative tests: assert that misusing the terrazel rules
+fails with a stable, user-visible error message.
+
+Each case names a target inside the sub-workspace under
+`broken_workspace/cases/<case>/` and a short stderr fragment expected
+when `bazel build :<target>` fails. The child workspace packages are
+excluded from the parent Bazel via the `--deleted_packages` flag in
+`.bazelrc` (the "deleted packages" trick recommended by
+rules_bazel_integration_test), so the outer Bazel never analyzes the
+intentionally-broken case targets when expanding `//...`.
+"""
+
+load("@bazel_binaries//:defs.bzl", "bazel_binaries")
+load(
+    "@rules_bazel_integration_test//bazel_integration_test:defs.bzl",
+    "bazel_integration_test",
+    "integration_test_utils",
+)
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+sh_binary(
+    name = "assert_build_fails",
+    srcs = ["assert_build_fails.sh"],
+)
+
+_CASES = [
+    # (case_name, target inside broken_workspace, stderr fragment)
+    ("duplicate_vars", "//cases/duplicate_vars:dup", "declared in both"),
+    ("validate_fails", "//cases/validate_fails:bad", "Reference to undeclared input variable"),
+    ("missing_provider", "//cases/missing_provider:missing", "Failed to query available provider packages"),
+    ("lock_file_smuggled", "//cases/lock_file_smuggled:smuggled", "refusing to validate"),
+]
+
+[
+    bazel_integration_test(
+        name = case_name + "_test",
+        bazel_binaries = bazel_binaries,
+        bazel_version = bazel_binaries.versions.current,
+        test_runner = ":assert_build_fails",
+        workspace_files = integration_test_utils.glob_workspace_files("broken_workspace") + [
+            "//:local_repository_files",
+        ],
+        tags = ["exclusive"],
+        timeout = "moderate",
+        workspace_path = "broken_workspace",
+        env = {
+            "TARGET": target,
+            "EXPECTED_PATTERN": pattern,
+        },
+    )
+    for (case_name, target, pattern) in _CASES
+]

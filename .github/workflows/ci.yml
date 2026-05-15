@@ -24,3 +24,10 @@ jobs:
 
       - name: Test
         run: bazel test //... --test_output=errors --verbose_failures
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::Uncommitted changes detected after build/test (e.g. MODULE.bazel.lock). Please run the failing commands locally and commit the updated files."
+            exit 1
+          fi
