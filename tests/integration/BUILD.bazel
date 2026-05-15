@@ -40,10 +40,7 @@ _CASES = [
         workspace_files = integration_test_utils.glob_workspace_files("broken_workspace") + [
             "//:local_repository_files",
         ],
-        tags = [
-            "exclusive",
-            "no-sandbox",
-        ],
+        tags = ["exclusive"],
         timeout = "moderate",
         workspace_path = "broken_workspace",
         env = {
