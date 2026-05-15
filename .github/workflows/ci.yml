@@ -25,9 +25,6 @@ jobs:
       - name: Test
         run: bazel test //... --test_output=errors --verbose_failures
 
-      - name: Integration tests
-        run: bazel test //tests/integration:integration_tests --test_output=streamed --verbose_failures
-
       - name: Check for uncommitted changes
         run: |
           if ! git diff --exit-code; then
