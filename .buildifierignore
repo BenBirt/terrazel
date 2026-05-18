@@ -1,4 +1,5 @@
-# The broken_workspace integration test fixture intentionally contains Starlark
-# files that violate bzl-visibility rules (that's the point of the test).
-# Exclude it from buildifier's recursive lint walk to avoid false positives.
+# The conflicting_providers test fixture loads @rules_tofu//tf/private:provider.bzl
+# directly (a private API). This triggers buildifier's bzl-visibility lint warning,
+# but it is intentional: the whole point of the test is to exercise what happens
+# when a user illegally instantiates tf_provider outside of the tf_providers extension.
 tests/integration/broken_workspace
