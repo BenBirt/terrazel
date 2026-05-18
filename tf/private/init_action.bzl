@@ -60,7 +60,12 @@ if [ -e "$CWD/.terraform.lock.hcl" ]; then
          "Lock files are managed implicitly via Bazel's provider pinning; remove it from srcs/data." 1>&2
     exit 1
 fi
-"$TOFU" -chdir="$CWD" init -backend=false -input=false -plugin-dir="$SCRATCH/$PLUGIN_DIR_REL"
+# Redirect init stdout to suppress "Installing provider" progress spam.
+# Stderr is kept so error messages (e.g. "Failed to query available provider
+# packages") and the "Incomplete lock file" warning remain visible.
+# There is no flag to skip lockfile generation — the lockfile is written into
+# $SCRATCH and discarded with it.
+"$TOFU" -chdir="$CWD" init -backend=false -input=false -plugin-dir="$SCRATCH/$PLUGIN_DIR_REL" >/dev/null
 "$TOFU" -chdir="$CWD" validate
 touch "$STAMP"
 """,
