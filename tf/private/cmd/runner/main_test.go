@@ -496,3 +496,61 @@ func writeJSON(t *testing.T, path string, v any) {
 		t.Fatal(err)
 	}
 }
+
+// TestRunner_BackendInSiblingDir verifies that a backend block located in a
+// sibling directory of the package dir (simulating a transitive tf_library dep
+// materialised at its own workspace-relative path) does NOT suppress the
+// -state= / -state-out= flags.
+//
+// Terraform reads backend configuration only from the root module — the
+// directory where `tofu init` is invoked (packageDir). Files from library deps
+// land at their own workspace-relative paths and are child modules, not the
+// root module, so their backend blocks are irrelevant to the root module's
+// state backend. hasBackend intentionally scans only the package directory.
+func TestRunner_BackendInSiblingDir(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+
+	// Find the work tree root from the runner args.
+	var workTree string
+	for _, arg := range cmd.Args {
+		if strings.HasPrefix(arg, "--work-tree=") {
+			workTree = strings.TrimPrefix(arg, "--work-tree=")
+		}
+	}
+	if workTree == "" {
+		t.Fatal("could not find --work-tree flag in runner cmd args")
+	}
+
+	// Simulate a tf_library dep materialised at a sibling path (e.g.
+	// "somelib/" next to "mypkg/"). Place a backend block there — it should
+	// be invisible to hasBackend, which only scans the package dir.
+	siblingDir := filepath.Join(workTree, "somelib")
+	if err := os.MkdirAll(siblingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	siblingBackend := filepath.Join(siblingDir, "backend.tf")
+	if err := os.WriteFile(siblingBackend, []byte(`
+terraform {
+  backend "s3" {}
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	// Backend block is in a sibling dir, not in the package dir — the runner
+	// must still pass -state= and -state-out= for the root module.
+	if !plan.hasArgWithPrefix("-state=") {
+		t.Errorf("plan invocation should have -state= when backend is only in sibling dir, got args: %v", plan.args)
+	}
+	if !plan.hasArgWithPrefix("-state-out=") {
+		t.Errorf("plan invocation should have -state-out= when backend is only in sibling dir, got args: %v", plan.args)
+	}
+}

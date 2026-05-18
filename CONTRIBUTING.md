@@ -12,8 +12,8 @@ You need:
 Clone the repo and build everything:
 
 ```sh
-git clone https://github.com/benbirt/terrazel.git
-cd terrazel
+git clone https://github.com/BenBirt/rules_tofu.git
+cd rules_tofu
 bazel build //...
 bazel test //...
 ```
