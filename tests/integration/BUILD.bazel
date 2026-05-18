@@ -29,6 +29,10 @@ _CASES = [
     ("validate_fails", "//cases/validate_fails:bad", "Reference to undeclared input variable"),
     ("missing_provider", "//cases/missing_provider:missing", "Failed to query available provider packages"),
     ("lock_file_smuggled", "//cases/lock_file_smuggled:smuggled", "refusing to validate"),
+    ("auto_tfvars_conflict", "//cases/auto_tfvars_conflict:deploy", "collides with the generated"),
+    ("external_module_ref", "//cases/external_module_ref:lib", "external Bazel module"),
+    ("malformed_var_file", "//cases/malformed_var_file:deploy", "parse:"),
+    ("conflicting_providers", "//cases/conflicting_providers:lib", "conflicting versions"),
 ]
 
 [
