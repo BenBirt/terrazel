@@ -113,9 +113,9 @@ tf_deploy_rule = rule(
             doc = "Variable values bound to this deploy. Rendered to rules_tofu.auto.tfvars.json.",
         ),
         "var_files": attr.label_list(
-            allow_files = [".tfvars.json"],
+            allow_files = [".tfvars.json", ".tfvars"],
             doc = "Variable-value files passed to every tofu invocation via -var-file. " +
-                  "Accepts any Label producing a .tfvars.json file (e.g. a genrule output). " +
+                  "Accepts any Label producing a .tfvars.json or .tfvars file (e.g. a genrule output). " +
                   "Keys in var_files must not overlap with keys in vars or other var_files entries.",
         ),
         "data": attr.label_list(
@@ -160,7 +160,7 @@ def tf_deploy(name, srcs = None, deps = None, vars = None, var_files = None, dat
       srcs: optional deploy-local .tf files (e.g. provider/backend config).
       deps: `tf_library` targets to compose.
       vars: dict of variable name -> value, rendered to rules_tofu.auto.tfvars.json.
-      var_files: Labels producing .tfvars.json files passed to tofu via -var-file.
+      var_files: Labels producing .tfvars.json or .tfvars files passed to tofu via -var-file.
           Accepts any Bazel Label (e.g. a genrule output). Keys must not overlap
           with vars or other var_files entries; duplicate keys fail at
           `bazel build` time via a dedicated check action.

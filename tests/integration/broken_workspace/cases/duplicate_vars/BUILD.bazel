@@ -11,8 +11,17 @@ tf_library(
 
 tf_deploy(
     name = "dup",
-    deps = [":lib"],
-    vars = {"foo": "from-vars"},
-    var_files = ["extra.tfvars.json"],
     fmt_test = False,
+    var_files = ["extra.tfvars.json"],
+    vars = {"foo": "from-vars"},
+    deps = [":lib"],
+)
+
+# Same check but using a standard HCL .tfvars file instead of JSON.
+tf_deploy(
+    name = "dup_hcl",
+    fmt_test = False,
+    var_files = ["extra.tfvars"],
+    vars = {"foo": "from-vars"},
+    deps = [":lib"],
 )

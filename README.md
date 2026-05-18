@@ -225,4 +225,3 @@ module "dns" {
   runner both consume the exec-platform provider binary, so the runtime
   host must match the build host.
 - Windows host support (downloads work; launcher script is bash-only).
-- Support `.tfvars` (HCL) in `var_files` once an HCL parser is available.

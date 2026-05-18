@@ -5,8 +5,8 @@ load("@rules_tofu//tf:defs.bzl", "tf_library")
 tf_library(
     name = "smuggled",
     srcs = [
-        "main.tf",
         ".terraform.lock.hcl",
+        "main.tf",
     ],
     fmt_test = False,
 )

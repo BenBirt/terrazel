@@ -1,9 +1,16 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/benbirt/rules_tofu
+gazelle(name = "gazelle")
+
 # This target collects all of the parent workspace files needed by the broken_workspace child workspace.
 filegroup(
     name = "local_repository_files",
     srcs = [
         "BUILD.bazel",
         "MODULE.bazel",
+        "go.mod",
+        "go.sum",
         "//tf:all_files",
         "//tf/private:all_files",
         "//tf/private/cmd/dupcheck:all_files",
@@ -11,4 +18,3 @@ filegroup(
     ],
     visibility = ["//:__subpackages__"],
 )
-

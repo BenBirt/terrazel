@@ -16,10 +16,10 @@ tf_library(
 # plan; GCP credentials are picked up by the provider at that point.
 tf_deploy(
     name = "storage_bucket",
-    deps = [":storage_bucket_lib"],
     vars = {
         "project": "rules_tofu-example",
         "region": "us-central1",
         "bucket_name": "rules_tofu-example-bucket",
     },
+    deps = [":storage_bucket_lib"],
 )

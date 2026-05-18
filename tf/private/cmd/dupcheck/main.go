@@ -9,13 +9,10 @@
 //   - --var-file=<label>:<path> (repeatable) — `label` is a human-readable
 //                                          identifier (typically the file's
 //                                          workspace-relative path); `path`
-//                                          points at a `.tfvars.json` file
+//                                          points at a `.tfvars.json` or `.tfvars` file
 //                                          whose top-level keys are checked.
 //   - --stamp=<path>         — file touched on success.
 //
-// Because `var_files` is restricted to `.tfvars.json` at the rule level,
-// JSON parsing of top-level object keys is a complete check; no HCL parser
-// is required.
 package main
 
 import (
@@ -25,6 +22,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/hashicorp/hcl/v2/hclparse"
 )
 
 type stringList []string
@@ -41,7 +40,7 @@ func stringListFlag(name, usage string) *stringList {
 var (
 	stamp    = flag.String("stamp", "", "path to a stamp file to touch on success")
 	varsKeys = stringListFlag("vars-key", "key from the deploy's `vars` dict (repeatable)")
-	varFiles = stringListFlag("var-file", "`label:path` of a .tfvars.json file (repeatable)")
+	varFiles = stringListFlag("var-file", "`label:path` of a .tfvars.json or .tfvars file (repeatable)")
 )
 
 func main() {
@@ -74,7 +73,7 @@ func run(varsKeys, varFiles []string, stamp string) error {
 		if !ok {
 			return fmt.Errorf("--var-file expected `label:path`, got %q", entry)
 		}
-		keys, err := readJSONKeys(path)
+		keys, err := readVarFileKeys(path)
 		if err != nil {
 			return fmt.Errorf("read var_file %s: %w", label, err)
 		}
@@ -93,6 +92,13 @@ func run(varsKeys, varFiles []string, stamp string) error {
 	return os.WriteFile(stamp, nil, 0o644)
 }
 
+func readVarFileKeys(path string) ([]string, error) {
+	if strings.HasSuffix(path, ".json") {
+		return readJSONKeys(path)
+	}
+	return readHCLKeys(path)
+}
+
 func readJSONKeys(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -104,6 +110,27 @@ func readJSONKeys(path string) ([]string, error) {
 	}
 	keys := make([]string, 0, len(top))
 	for k := range top {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+func readHCLKeys(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	parser := hclparse.NewParser()
+	file, diags := parser.ParseHCL(data, path)
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("parse: %w", diags)
+	}
+	attrs, diags := file.Body.JustAttributes()
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("parse: %w", diags)
+	}
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
 		keys = append(keys, k)
 	}
 	return keys, nil

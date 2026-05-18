@@ -16,9 +16,9 @@ tf_library(
 # credentials are picked up by the provider at that point.
 tf_deploy(
     name = "s3_bucket",
-    deps = [":s3_bucket_lib"],
     vars = {
         "region": "us-east-1",
         "bucket_name": "rules_tofu-example-bucket",
     },
+    deps = [":s3_bucket_lib"],
 )

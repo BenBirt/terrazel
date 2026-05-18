@@ -6,27 +6,27 @@ load("@rules_tofu//tf/private:provider.bzl", "tf_provider")
 tf_provider(
     name = "prov1",
     address = "registry.opentofu.org/hashicorp/aws",
-    version = "5.70.0",
     binaries = {
         "main.tf": "linux_amd64",
     },
+    version = "5.70.0",
 )
 
 tf_provider(
     name = "prov2",
     address = "registry.opentofu.org/hashicorp/aws",
-    version = "5.80.0",
     binaries = {
         "main.tf": "linux_amd64",
     },
+    version = "5.80.0",
 )
 
 tf_library(
     name = "lib",
     srcs = ["main.tf"],
+    fmt_test = False,
     providers = [
         ":prov1",
         ":prov2",
     ],
-    fmt_test = False,
 )

@@ -32,76 +32,101 @@ func dupcheckBin(t *testing.T) string {
 	return *dupcheckBinPath
 }
 
-// setup returns a freshly-prepared *exec.Cmd with --stamp wired up, plus a
-// helper that writes a .tfvars.json file and returns its path.
-func setup(t *testing.T) (cmd *exec.Cmd, stamp string, addVarFile func(string, map[string]any) string) {
+// dupcheckCmd wraps an exec.Cmd for the dupcheck binary with helpers for
+// writing var files into a temp directory and reading the stamp path.
+type dupcheckCmd struct {
+	Cmd     *exec.Cmd
+	Stamp   string
+	t       *testing.T
+	dir     string
+	counter int
+}
+
+func setup(t *testing.T) *dupcheckCmd {
 	t.Helper()
 	bin := dupcheckBin(t)
 	dir := t.TempDir()
-	stamp = filepath.Join(dir, "stamp")
-
-	cmd = exec.Command(bin, "--stamp="+stamp)
-
-	var counter int
-	addVarFile = func(label string, contents map[string]any) string {
-		counter++
-		path := filepath.Join(dir, fmt.Sprintf("varfile%d.tfvars.json", counter))
-		writeJSON(t, path, contents)
-		return label + ":" + path
+	stamp := filepath.Join(dir, "stamp")
+	return &dupcheckCmd{
+		Cmd:   exec.Command(bin, "--stamp="+stamp),
+		Stamp: stamp,
+		t:     t,
+		dir:   dir,
 	}
-	return cmd, stamp, addVarFile
+}
+
+// AddVarFile writes a .tfvars.json file with the given JSON contents and
+// returns the "label:path" flag value ready to pass as --var-file.
+func (d *dupcheckCmd) addVarFile(label string, contents map[string]any) string {
+	d.t.Helper()
+	d.counter++
+	path := filepath.Join(d.dir, fmt.Sprintf("varfile%d.tfvars.json", d.counter))
+	writeJSON(d.t, path, contents)
+	return label + ":" + path
+}
+
+// AddHCLVarFile writes a .tfvars file with the given raw HCL content and
+// returns the "label:path" flag value ready to pass as --var-file.
+func (d *dupcheckCmd) addHCLVarFile(label string, content string) string {
+	d.t.Helper()
+	d.counter++
+	path := filepath.Join(d.dir, fmt.Sprintf("varfile%d.tfvars", d.counter))
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		d.t.Fatal(err)
+	}
+	return label + ":" + path
 }
 
 func TestDupcheck_NoVarFiles(t *testing.T) {
-	cmd, stamp, _ := setup(t)
-	cmd.Args = append(cmd.Args, "--vars-key=region", "--vars-key=env")
-	if out, err := cmd.CombinedOutput(); err != nil {
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args, "--vars-key=region", "--vars-key=env")
+	if out, err := d.Cmd.CombinedOutput(); err != nil {
 		t.Fatalf("dupcheck failed unexpectedly: %v\n%s", err, out)
 	}
-	if _, err := os.Stat(stamp); err != nil {
+	if _, err := os.Stat(d.Stamp); err != nil {
 		t.Fatalf("stamp not written: %v", err)
 	}
 }
 
 func TestDupcheck_VarFileNoOverlap(t *testing.T) {
-	cmd, stamp, addVarFile := setup(t)
-	cmd.Args = append(cmd.Args,
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args,
 		"--vars-key=region",
-		"--var-file="+addVarFile("secrets.tfvars.json", map[string]any{"db_password": "x"}),
+		"--var-file="+d.addVarFile("secrets.tfvars.json", map[string]any{"db_password": "x"}),
 	)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := d.Cmd.CombinedOutput(); err != nil {
 		t.Fatalf("dupcheck failed unexpectedly: %v\n%s", err, out)
 	}
-	if _, err := os.Stat(stamp); err != nil {
+	if _, err := os.Stat(d.Stamp); err != nil {
 		t.Fatalf("stamp not written: %v", err)
 	}
 }
 
 func TestDupcheck_VarFileOverlapsVars(t *testing.T) {
-	cmd, stamp, addVarFile := setup(t)
-	cmd.Args = append(cmd.Args,
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args,
 		"--vars-key=region",
-		"--var-file="+addVarFile("override.tfvars.json", map[string]any{"region": "eu-west-1"}),
+		"--var-file="+d.addVarFile("override.tfvars.json", map[string]any{"region": "eu-west-1"}),
 	)
-	out, err := cmd.CombinedOutput()
+	out, err := d.Cmd.CombinedOutput()
 	if err == nil {
 		t.Fatal("expected dupcheck to fail on duplicate key, but it succeeded")
 	}
 	if !strings.Contains(string(out), `"region"`) {
 		t.Errorf("expected output to mention the duplicate key, got: %s", out)
 	}
-	if _, err := os.Stat(stamp); !os.IsNotExist(err) {
+	if _, err := os.Stat(d.Stamp); !os.IsNotExist(err) {
 		t.Errorf("stamp should not be written on failure, got err=%v", err)
 	}
 }
 
 func TestDupcheck_VarFilesOverlapEachOther(t *testing.T) {
-	cmd, _, addVarFile := setup(t)
-	cmd.Args = append(cmd.Args,
-		"--var-file="+addVarFile("a.tfvars.json", map[string]any{"env": "prod"}),
-		"--var-file="+addVarFile("b.tfvars.json", map[string]any{"env": "staging"}),
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args,
+		"--var-file="+d.addVarFile("a.tfvars.json", map[string]any{"env": "prod"}),
+		"--var-file="+d.addVarFile("b.tfvars.json", map[string]any{"env": "staging"}),
 	)
-	out, err := cmd.CombinedOutput()
+	out, err := d.Cmd.CombinedOutput()
 	if err == nil {
 		t.Fatal("expected dupcheck to fail on duplicate key across var files, but it succeeded")
 	}
@@ -111,18 +136,87 @@ func TestDupcheck_VarFilesOverlapEachOther(t *testing.T) {
 }
 
 func TestDupcheck_MalformedVarFile(t *testing.T) {
-	cmd, _, _ := setup(t)
+	d := setup(t)
 	dir := t.TempDir()
 	bad := filepath.Join(dir, "bad.tfvars.json")
 	if err := os.WriteFile(bad, []byte("not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cmd.Args = append(cmd.Args, "--var-file=bad.tfvars.json:"+bad)
-	out, err := cmd.CombinedOutput()
+	d.Cmd.Args = append(d.Cmd.Args, "--var-file=bad.tfvars.json:"+bad)
+	out, err := d.Cmd.CombinedOutput()
 	if err == nil {
 		t.Fatal("expected dupcheck to fail on malformed var file, but it succeeded")
 	}
 	if !strings.Contains(string(out), "bad.tfvars.json") {
+		t.Errorf("expected output to mention the offending file, got: %s", out)
+	}
+}
+
+func TestDupcheck_HCLVarFileNoOverlap(t *testing.T) {
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args,
+		"--vars-key=region",
+		"--var-file="+d.addHCLVarFile("secrets.tfvars", `
+			db_password = "x"
+			db_username = "admin"
+		`),
+	)
+	if out, err := d.Cmd.CombinedOutput(); err != nil {
+		t.Fatalf("dupcheck failed unexpectedly: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(d.Stamp); err != nil {
+		t.Fatalf("stamp not written: %v", err)
+	}
+}
+
+func TestDupcheck_HCLVarFileOverlapsVars(t *testing.T) {
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args,
+		"--vars-key=region",
+		"--var-file="+d.addHCLVarFile("override.tfvars", `
+			region = "eu-west-1"
+		`),
+	)
+	out, err := d.Cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected dupcheck to fail on duplicate key, but it succeeded")
+	}
+	if !strings.Contains(string(out), `"region"`) {
+		t.Errorf("expected output to mention the duplicate key, got: %s", out)
+	}
+	if _, err := os.Stat(d.Stamp); !os.IsNotExist(err) {
+		t.Errorf("stamp should not be written on failure, got err=%v", err)
+	}
+}
+
+func TestDupcheck_HCLVarFilesOverlapEachOther(t *testing.T) {
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args,
+		"--var-file="+d.addHCLVarFile("a.tfvars", `env = "prod"`),
+		"--var-file="+d.addHCLVarFile("b.tfvars", `env = "staging"`),
+	)
+	out, err := d.Cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected dupcheck to fail on duplicate key across var files, but it succeeded")
+	}
+	if !strings.Contains(string(out), `"env"`) {
+		t.Errorf("expected output to mention the duplicate key, got: %s", out)
+	}
+}
+
+func TestDupcheck_HCLMalformedVarFile(t *testing.T) {
+	d := setup(t)
+	d.Cmd.Args = append(d.Cmd.Args,
+		"--var-file="+d.addHCLVarFile("bad.tfvars", `
+			# Missing value is invalid HCL
+			invalid_assignment = 
+		`),
+	)
+	out, err := d.Cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected dupcheck to fail on malformed var file, but it succeeded")
+	}
+	if !strings.Contains(string(out), "bad.tfvars") {
 		t.Errorf("expected output to mention the offending file, got: %s", out)
 	}
 }
