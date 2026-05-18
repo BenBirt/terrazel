@@ -75,4 +75,3 @@ tf_fmt_check_test = rule(
     },
     toolchains = [TOOLCHAIN_TYPE],
 )
-

@@ -168,9 +168,10 @@ func runTofu(env []string, cwd string, args ...string) error {
 }
 
 // hasBackend reports whether any .tf file in the deploy's package
-// declares a top-level `backend "..." {` block. Crude but sufficient: a
-// real HCL parser would be heavyweight for a boolean check, and false
-// positives just mean we let the configured backend own state.
+// declares a `backend "..." {}` or `cloud {}` block nested inside a
+// top-level `terraform {}` block. Either construct means the workspace
+// uses a remote/cloud state backend, and local -state/-state-out flags
+// should be omitted from the runner invocation.
 func hasBackend(cwd string) bool {
 	entries, err := os.ReadDir(cwd)
 	if err != nil {
@@ -204,7 +205,7 @@ func containsBackendBlock(b []byte, filename string) bool {
 	for _, block := range body.Blocks {
 		if block.Type == "terraform" {
 			for _, nestedBlock := range block.Body.Blocks {
-				if nestedBlock.Type == "backend" {
+				if nestedBlock.Type == "backend" || nestedBlock.Type == "cloud" {
 					return true
 				}
 			}

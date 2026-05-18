@@ -31,3 +31,26 @@ jobs:
             echo "::error::Uncommitted changes detected after build/test (e.g. MODULE.bazel.lock). Please run the failing commands locally and commit the updated files."
             exit 1
           fi
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install buildifier
+        run: |
+          go install github.com/bazelbuild/buildtools/buildifier@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run buildifier (format check)
+        run: |
+          buildifier --mode=check -r \
+            --path=. \
+            $(find . -name "*.bzl" -o -name "*.bazel" -o -name "BUILD" -o -name "WORKSPACE" \
+              | grep -v tests/integration/broken_workspace)
+
+      - name: Run buildifier (lint warnings)
+        run: |
+          buildifier --lint=warn -r \
+            $(find . -name "*.bzl" -o -name "*.bazel" -o -name "BUILD" -o -name "WORKSPACE" \
+              | grep -v tests/integration/broken_workspace)
