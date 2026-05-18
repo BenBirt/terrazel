@@ -1,25 +1,25 @@
-load("@terrazel//terraform:defs.bzl", "terraform_deploy", "terraform_library")
+load("@rules_tofu//tf:defs.bzl", "tf_deploy", "tf_library")
 
 package(default_visibility = ["//visibility:public"])
 
 # Reusable library declaring the GCP provider it needs. Any deploy that
-# depends on it inherits the provider through TerraformLibraryInfo.providers.
-terraform_library(
+# depends on it inherits the provider through TfLibraryInfo.providers.
+tf_library(
     name = "storage_bucket_lib",
     srcs = ["main.tf"],
-    providers = ["@terraform_providers_hashicorp_google//:provider"],
+    providers = ["@tf_providers_hashicorp_google//:provider"],
 )
 
 # Root invocation that binds variable values. `bazel build :storage_bucket`
 # runs `tofu init -backend=false && tofu validate` offline against the
 # vendored provider tree. `bazel run :storage_bucket.plan` then runs a real
 # plan; GCP credentials are picked up by the provider at that point.
-terraform_deploy(
+tf_deploy(
     name = "storage_bucket",
     deps = [":storage_bucket_lib"],
     vars = {
-        "project": "terrazel-example",
+        "project": "rules_tofu-example",
         "region": "us-central1",
-        "bucket_name": "terrazel-example-bucket",
+        "bucket_name": "rules_tofu-example-bucket",
     },
 )

@@ -1,16 +1,16 @@
-# terrazel
+# rules_tofu
 
 Bazel rules for managing [OpenTofu](https://opentofu.org/) (and, by extension,
 Terraform-compatible) configuration as first-class build targets.
 
-`terrazel` exposes two rules, patterned after the archived
+`rules_tofu` exposes two rules, patterned after the archived
 [rules_k8s](https://github.com/bazelbuild/rules_k8s):
 
-- `terraform_library` — a reusable bundle of `.tf` files plus its transitive
-  `terraform_library` deps. Analogous to `cc_library`. Not directly runnable
+- `tf_library` — a reusable bundle of `.tf` files plus its transitive
+  `tf_library` deps. Analogous to `cc_library`. Not directly runnable
   and carries no variable values.
-- `terraform_deploy` — a *root* invocation that binds variable values to
-  one or more `terraform_library` targets. The macro automatically
+- `tf_deploy` — a *root* invocation that binds variable values to
+  one or more `tf_library` targets. The macro automatically
   generates three runnable sub-targets: `:foo.plan`, `:foo.apply`, and
   `:foo.destroy`. Analogous to `cc_binary`.
 
@@ -19,9 +19,9 @@ Terraform-compatible) configuration as first-class build targets.
 In your downstream repo's `MODULE.bazel`:
 
 ```python
-bazel_dep(name = "terrazel", version = "0.1.0")
+bazel_dep(name = "rules_tofu", version = "0.1.0")
 
-tofu = use_extension("@terrazel//toolchain:extensions.bzl", "tofu")
+tofu = use_extension("@rules_tofu//toolchain:extensions.bzl", "tofu")
 # tofu.version(version = "1.8.5")  # optional; defaults to a pinned version
 use_repo(tofu, "tofu_toolchains")
 ```
@@ -29,14 +29,14 @@ use_repo(tofu, "tofu_toolchains")
 In a `BUILD.bazel`:
 
 ```python
-load("@terrazel//terraform:defs.bzl", "terraform_library", "terraform_deploy")
+load("@rules_tofu//tf:defs.bzl", "tf_library", "tf_deploy")
 
-terraform_library(
+tf_library(
     name = "network",
     srcs = ["network.tf", "outputs.tf"],
 )
 
-terraform_deploy(
+tf_deploy(
     name = "prod",
     deps = [":network"],
     srcs = ["backend.tf"],            # provider + backend config local to this deploy
@@ -51,14 +51,14 @@ terraform_deploy(
 
 Provider plugins are pinned per-platform in `MODULE.bazel` and passed to
 the rules that use them. The repository name is derived from `source`
-(e.g. `hashicorp/aws` → `@terraform_providers_hashicorp_aws`):
+(e.g. `hashicorp/aws` → `@tf_providers_hashicorp_aws`):
 
 ```python
-terraform_providers = use_extension(
-    "@terrazel//terraform/providers:extensions.bzl",
-    "terraform_providers",
+tf_providers = use_extension(
+    "@rules_tofu//tf/providers:extensions.bzl",
+    "tf_providers",
 )
-terraform_providers.provider(
+tf_providers.provider(
     source = "hashicorp/aws",
     version = "5.70.0",
     sha256 = {
@@ -68,7 +68,7 @@ terraform_providers.provider(
         "darwin_arm64":  "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
     },
 )
-use_repo(terraform_providers, "terraform_providers_hashicorp_aws")
+use_repo(tf_providers, "tf_providers_hashicorp_aws")
 ```
 
 When multiple modules in the dependency graph request the same provider,
@@ -76,16 +76,16 @@ the extension resolves to a single version: the root module's version wins
 if specified, otherwise the highest requested version is selected.
 
 ```python
-terraform_library(
+tf_library(
     name = "s3_bucket_lib",
     srcs = ["main.tf"],
-    providers = ["@terraform_providers_hashicorp_aws//:provider"],
+    providers = ["@tf_providers_hashicorp_aws//:provider"],
 )
 ```
 
 See `examples/aws/` and `examples/gcp/` for full end-to-end uses.
 
-A `terraform_deploy` may declare its own `providers = [...]`; the union
+A `tf_deploy` may declare its own `providers = [...]`; the union
 of a deploy's direct providers and the providers contributed by its
 library `deps` is the set that gets vendored. The exec-platform binary is
 symlinked into the deploy's work tree at Terraform's canonical
@@ -115,7 +115,7 @@ genrule(
     tools = ["//tools:fetch-secrets"],
 )
 
-terraform_deploy(
+tf_deploy(
     name = "prod",
     deps = [":network"],
     vars = {"region": "us-east-1"},
@@ -135,14 +135,14 @@ bazel run //path/to:prod.destroy -- --auto-approve # skip prompt
 
 ## How it works
 
-At analysis time `terraform_deploy` materializes every transitive `.tf`
+At analysis time `tf_deploy` materializes every transitive `.tf`
 file — plus any `var_files` — into a directory tree under
 `bazel-bin/<pkg>/<name>.work/` via `ctx.actions.symlink`, preserving
 each file's workspace-relative path. It also writes
-`<name>.work/<pkg>/terrazel.auto.tfvars.json` from `vars = {...}`.
+`<name>.work/<pkg>/rules_tofu.auto.tfvars.json` from `vars = {...}`.
 
-`bazel build :foo` (whether `:foo` is a `terraform_library` or a
-`terraform_deploy`) materializes the work tree AND runs
+`bazel build :foo` (whether `:foo` is a `tf_library` or a
+`tf_deploy`) materializes the work tree AND runs
 `tofu init -backend=false && tofu validate` as a build action, so
 configuration syntax/reference errors fail the build (with action
 caching). `bazel test //...` runs the `:foo.fmt_check` test targets;
@@ -170,7 +170,7 @@ and all `var_files` entries — overlaps fail the build (with caching),
 not the run.
 
 State is persisted per-deploy at the deploy target's `$(RULEDIR)`, i.e.
-`bazel-bin/<package>/<name>.terrazel-state/` (already covered by the
+`bazel-bin/<package>/<name>.rules_tofu-state/` (already covered by the
 standard `bazel-*` gitignore and wiped by `bazel clean`). If the
 deploy declares a `backend "..." {}` block in any of its `.tf` files,
 the runner defers to that backend and skips the local-state flags.
@@ -203,8 +203,8 @@ module "dns" {
 
 - Only `.tf`, `.tf.json`, `.tftpl`, and `.hcl` files are allowed in
   `srcs`. `.tfvars` and `.tfvars.json` are intentionally rejected there
-  — variable values must come through `terraform_deploy(vars = {...})`
-  or `terraform_deploy(var_files = [...])`, not via files committed in
+  — variable values must come through `tf_deploy(vars = {...})`
+  or `tf_deploy(var_files = [...])`, not via files committed in
   libraries.
 - `var_files` accepts only `.tfvars.json` (JSON format). This restriction
   enables complete duplicate-key detection without an HCL parser. If you

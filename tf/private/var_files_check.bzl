@@ -1,4 +1,4 @@
-"""Build-time duplicate-variable check for `terraform_deploy`.
+"""Build-time duplicate-variable check for `tf_deploy`.
 
 The deploy rule calls `tf_check_var_files(...)` to attach a check stamp
 to its outputs, so any overlap between keys in `vars` and `var_files`
@@ -10,7 +10,7 @@ the action's JSON-only parser is a complete check; no HCL parser is
 required.
 """
 
-DUPCHECK_BIN = "//terraform/private/cmd/dupcheck:dupcheck"
+DUPCHECK_BIN = "//tf/private/cmd/dupcheck:dupcheck"
 
 def tf_check_var_files(ctx, vars_keys, var_files):
     """Emit a build-time duplicate-key check across `vars` and `var_files`.
@@ -45,8 +45,8 @@ def tf_check_var_files(ctx, vars_keys, var_files):
         inputs = var_files,
         outputs = [stamp],
         arguments = [args],
-        mnemonic = "TerrazelVarFilesCheck",
-        progress_message = "TerrazelVarFilesCheck %{label}",
+        mnemonic = "RulesTofuVarFilesCheck",
+        progress_message = "RulesTofuVarFilesCheck %{label}",
     )
     return stamp
 

@@ -4,9 +4,9 @@ filegroup(
     srcs = [
         "BUILD.bazel",
         "MODULE.bazel",
-        "//terraform:all_files",
-        "//terraform/private:all_files",
-        "//terraform/private/cmd/dupcheck:all_files",
+        "//tf:all_files",
+        "//tf/private:all_files",
+        "//tf/private/cmd/dupcheck:all_files",
         "//toolchain:all_files",
     ],
     visibility = ["//:__subpackages__"],

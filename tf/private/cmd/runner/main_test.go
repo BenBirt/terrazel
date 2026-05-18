@@ -89,7 +89,7 @@ func parseInvocations(data []byte) []invocation {
 }
 
 // setup creates a temporary work tree with the given vars written to
-// terrazel.auto.tfvars.json, and a fake tofu script that logs each invocation
+// rules_tofu.auto.tfvars.json, and a fake tofu script that logs each invocation
 // to a temp file. It returns:
 //   - a pre-configured runner Cmd (callers may append --var-file flags before running)
 //   - addVarFile: writes a .tfvars.json file and returns its path
@@ -117,7 +117,7 @@ func setup(t *testing.T, vars map[string]any) (
 	if err := os.MkdirAll(filepath.Join(workTree, pkgDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(workTree, pkgDir, "terrazel.auto.tfvars.json"), vars)
+	writeJSON(t, filepath.Join(workTree, pkgDir, "rules_tofu.auto.tfvars.json"), vars)
 
 	var varFileCounter int
 	addVarFile = func(contents map[string]any) string {
@@ -136,7 +136,7 @@ func setup(t *testing.T, vars map[string]any) (
 		return parseInvocations(data)
 	}
 
-	pluginDir := filepath.Join(workTree, pkgDir, ".terrazel-plugins")
+	pluginDir := filepath.Join(workTree, pkgDir, ".rules_tofu-plugins")
 
 	cmd = exec.Command(bin,
 		"--tofu="+fakeTofuSh,

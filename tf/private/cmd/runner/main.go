@@ -1,4 +1,4 @@
-// Command runner is terrazel's tofu plan/apply wrapper. It is invoked by
+// Command runner is rules_tofu's tofu plan/apply wrapper. It is invoked by
 // the generated shell launcher emitted by the tf_runner rule with every
 // configuration value passed via explicit standard flags.
 //
@@ -51,7 +51,7 @@ var (
 
 func main() {
 	log.SetFlags(0)
-	log.SetPrefix("terrazel: ")
+	log.SetPrefix("rules_tofu: ")
 	flag.Parse()
 
 	if err := run(); err != nil {
@@ -85,7 +85,7 @@ func run() error {
 
 	if os.Getenv("BUILD_WORKSPACE_DIRECTORY") == "" {
 		return errors.New(
-			"terrazel runner must be invoked via `bazel run`. " +
+			"rules_tofu runner must be invoked via `bazel run`. " +
 				"BUILD_WORKSPACE_DIRECTORY is unset, so state cannot be persisted.",
 		)
 	}
@@ -106,7 +106,7 @@ func run() error {
 	env := append(os.Environ(), "TF_IN_AUTOMATION=1")
 
 	// Ensure the vendored plugin tree exists even when zero providers are in
-	// scope (the deploy declares no symlinks under .terrazel-plugins/ in that
+	// scope (the deploy declares no symlinks under .rules_tofu-plugins/ in that
 	// case, so the runfiles tree lacks the directory). -plugin-dir overrides
 	// all default plugin search paths and prevents the registry from being
 	// contacted at runtime.
@@ -135,7 +135,7 @@ func run() error {
 		if err := runTofu(env, cwd, args...); err != nil {
 			return fmt.Errorf("tofu plan: %w", err)
 		}
-		fmt.Printf("terrazel: plan saved to %s\n", planFile)
+		fmt.Printf("rules_tofu: plan saved to %s\n", planFile)
 	case "apply":
 		applyArgs := append([]string{"apply", "-input=false"}, varFileArgs...)
 		applyArgs = append(applyArgs, stateArgs...)

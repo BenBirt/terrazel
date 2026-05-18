@@ -1,4 +1,4 @@
-package(default_visibility = ["//terraform:__subpackages__"])
+package(default_visibility = ["//tf:__subpackages__"])
 
 filegroup(
     name = "all_files",

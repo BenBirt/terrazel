@@ -1,10 +1,10 @@
-"""`terraform_deploy` rule + macro.
+"""`tf_deploy` rule + macro.
 
 The macro always emits:
-  - `:<name>`         — the `_terraform_deploy` data target. Its outputs are
+  - `:<name>`         — the `_tf_deploy` data target. Its outputs are
                         the materialized working tree (a symlink-mirror of
                         every transitive .tf input at its workspace-relative
-                        path, plus a generated `terrazel.auto.tfvars.json`),
+                        path, plus a generated `rules_tofu.auto.tfvars.json`),
                         a validate stamp produced by running
                         `tofu init -backend=false && tofu validate` at build
                         time, and (when `var_files` is non-empty) a stamp
@@ -28,7 +28,7 @@ mktemp'd; nothing is symlinked from bash.
 load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 load(":fmt.bzl", _tf_fmt = "tf_fmt", _tf_fmt_check = "tf_fmt_check_test")
 load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
-load(":providers.bzl", "TerraformDeployInfo", "TerraformLibraryInfo", "TerraformProviderInfo")
+load(":providers.bzl", "TfDeployInfo", "TfLibraryInfo", "TfProviderInfo")
 load(":runner.bzl", _tf_runner = "tf_runner")
 load(":var_files_check.bzl", "DUPCHECK_BIN", _tf_check_var_files = "tf_check_var_files")
 load(
@@ -41,10 +41,10 @@ load(
 
 _ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
-def _terraform_deploy_impl(ctx):
+def _tf_deploy_impl(ctx):
     direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs + ctx.files.data]
     var_file_entries = [struct(path = f.short_path, file = f) for f in ctx.files.var_files]
-    transitive = [d[TerraformLibraryInfo].transitive_files for d in ctx.attr.deps]
+    transitive = [d[TfLibraryInfo].transitive_files for d in ctx.attr.deps]
     entries = depset(direct = direct + var_file_entries, transitive = transitive).to_list()
 
     tfvars_content = json.encode_indent(
@@ -55,9 +55,9 @@ def _terraform_deploy_impl(ctx):
     outputs = _materialize(ctx, entries, tfvars_content = tfvars_content)
 
     # Aggregate providers: direct + transitive via library deps.
-    direct_providers = [p[TerraformProviderInfo] for p in ctx.attr.providers]
+    direct_providers = [p[TfProviderInfo] for p in ctx.attr.providers]
     transitive_provider_sets = [
-        d[TerraformLibraryInfo].providers
+        d[TfLibraryInfo].providers
         for d in ctx.attr.deps
     ]
     providers_depset = depset(direct = direct_providers, transitive = transitive_provider_sets)
@@ -89,7 +89,7 @@ def _terraform_deploy_impl(ctx):
 
     return [
         DefaultInfo(files = depset(direct = default_files, transitive = [work_tree_files])),
-        TerraformDeployInfo(
+        TfDeployInfo(
             work_tree = outputs[0],
             work_tree_files = work_tree_files,
             package_dir = ctx.label.package,
@@ -98,19 +98,19 @@ def _terraform_deploy_impl(ctx):
         ),
     ]
 
-terraform_deploy_rule = rule(
-    implementation = _terraform_deploy_impl,
+tf_deploy_rule = rule(
+    implementation = _tf_deploy_impl,
     attrs = {
         "srcs": attr.label_list(
             allow_files = _ALLOWED_EXTS,
             doc = "Optional deploy-local config files (e.g. provider/backend setup).",
         ),
         "deps": attr.label_list(
-            providers = [TerraformLibraryInfo],
-            doc = "`terraform_library` targets this deploy composes.",
+            providers = [TfLibraryInfo],
+            doc = "`tf_library` targets this deploy composes.",
         ),
         "vars": attr.string_dict(
-            doc = "Variable values bound to this deploy. Rendered to terrazel.auto.tfvars.json.",
+            doc = "Variable values bound to this deploy. Rendered to rules_tofu.auto.tfvars.json.",
         ),
         "var_files": attr.label_list(
             allow_files = [".tfvars.json"],
@@ -124,11 +124,11 @@ terraform_deploy_rule = rule(
                   "Use to expose files for `file()` calls in Terraform configs.",
         ),
         "providers": attr.label_list(
-            providers = [TerraformProviderInfo],
+            providers = [TfProviderInfo],
             doc = "Vendored OpenTofu/Terraform providers this deploy declares directly. " +
                   "Unioned with providers contributed transitively by `deps`. " +
                   "Each entry is typically a `@<repo>//:provider` target exposed by " +
-                  "`terraform_providers.provider(...)` in MODULE.bazel.",
+                  "`tf_providers.provider(...)` in MODULE.bazel.",
         ),
         "_dupcheck_bin": attr.label(
             default = DUPCHECK_BIN,
@@ -137,10 +137,10 @@ terraform_deploy_rule = rule(
         ),
     },
     toolchains = [TOOLCHAIN_TYPE],
-    doc = "Underlying data-carrier for `terraform_deploy`. Use the macro.",
+    doc = "Underlying data-carrier for `tf_deploy`. Use the macro.",
 )
 
-def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, providers = None, fmt_test = True, **kwargs):
+def tf_deploy(name, srcs = None, deps = None, vars = None, var_files = None, data = None, providers = None, fmt_test = True, **kwargs):
     """A root Terraform/OpenTofu invocation.
 
     Always generates:
@@ -158,16 +158,16 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
     Args:
       name: target name.
       srcs: optional deploy-local .tf files (e.g. provider/backend config).
-      deps: `terraform_library` targets to compose.
-      vars: dict of variable name -> value, rendered to terrazel.auto.tfvars.json.
+      deps: `tf_library` targets to compose.
+      vars: dict of variable name -> value, rendered to rules_tofu.auto.tfvars.json.
       var_files: Labels producing .tfvars.json files passed to tofu via -var-file.
           Accepts any Bazel Label (e.g. a genrule output). Keys must not overlap
           with vars or other var_files entries; duplicate keys fail at
           `bazel build` time via a dedicated check action.
       data: arbitrary files to include in the work tree, enabling `file()` calls
           in Terraform configs.
-      providers: `terraform_provider` targets (typically `@<repo>//:provider` exposed
-          by `terraform_providers.provider(...)` in MODULE.bazel) declared at the deploy
+      providers: `tf_provider` targets (typically `@<repo>//:provider` exposed
+          by `tf_providers.provider(...)` in MODULE.bazel) declared at the deploy
           level. Unioned with providers transitively contributed by `deps`. The exec
           platform binary is symlinked into the work tree's plugin dir; `tofu init`
           runs offline against it.
@@ -179,7 +179,7 @@ def terraform_deploy(name, srcs = None, deps = None, vars = None, var_files = No
         if forwarded in kwargs:
             common_kwargs[forwarded] = kwargs.pop(forwarded)
 
-    terraform_deploy_rule(
+    tf_deploy_rule(
         name = name,
         srcs = srcs or [],
         deps = deps or [],

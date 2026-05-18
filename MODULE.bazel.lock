@@ -252,14 +252,14 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
-    "//terraform/providers:extensions.bzl%terraform_providers": {
+    "//tf/providers:extensions.bzl%tf_providers": {
       "general": {
-        "bzlTransitiveDigest": "aoZJLpdsvYWD6/s5HVtlUz+M6c04tWMbsbeRKvyuZ8c=",
-        "usagesDigest": "bjT2Wuo9P5bpDIU62xkBvEcd6QN/rI0+/WFVkQAinyg=",
+        "bzlTransitiveDigest": "2ap4Ih+gTlPz3Wx9+kiNo8UaapwmFgaRUFUO1JqLuA8=",
+        "usagesDigest": "0yGcq1+v8AbPjpGfyso68a+Hfg5FbPcsuOrWeM5t9iI=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
-          "terraform_providers_hashicorp_aws": {
-            "repoRuleId": "@@//terraform/providers:extensions.bzl%_terraform_provider_download",
+          "tf_providers_hashicorp_aws": {
+            "repoRuleId": "@@//tf/providers:extensions.bzl%_tf_provider_download",
             "attributes": {
               "source": "hashicorp/aws",
               "version": "5.70.0",
@@ -272,8 +272,8 @@
               }
             }
           },
-          "terraform_providers_hashicorp_google": {
-            "repoRuleId": "@@//terraform/providers:extensions.bzl%_terraform_provider_download",
+          "tf_providers_hashicorp_google": {
+            "repoRuleId": "@@//tf/providers:extensions.bzl%_tf_provider_download",
             "attributes": {
               "source": "hashicorp/google",
               "version": "5.45.0",
@@ -291,8 +291,8 @@
     },
     "//toolchain:extensions.bzl%tofu": {
       "general": {
-        "bzlTransitiveDigest": "Hxs+UIaP2e8zVe3qdvTkluHUe2G7GCMyR/kfigAEzLw=",
-        "usagesDigest": "V+5VG7Q6hzUCmW2XPjhVteB48p171NWT59hNEyq2LgI=",
+        "bzlTransitiveDigest": "46AZi1GQNIG1L+lYY6FD+wC4X9yy+T9yOsFUa88q7Co=",
+        "usagesDigest": "CjW86UdZEo8LkSe7QkaoBsJSpRELuBlgpdDlQwIXOHs=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "tofu_linux_amd64": {
@@ -363,7 +363,7 @@
     "@@rules_bazel_integration_test+//:extensions.bzl%bazel_binaries": {
       "general": {
         "bzlTransitiveDigest": "XC9nqZ31LIbq8N7cEK+rYa2iXNQLcJ3cyGWw+zPZlc0=",
-        "usagesDigest": "3nVFV/9JJqN5Ywv1xBGxJJZnV6qQDWZI+TFPG9sWswE=",
+        "usagesDigest": "q/121CveC2OnHywTTAHVNL7nvBUVWzwBt88UDXMD/CM=",
         "recordedInputs": [
           "REPO_MAPPING:rules_bazel_integration_test+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_bazel_integration_test+,cgrindel_bazel_starlib cgrindel_bazel_starlib+"

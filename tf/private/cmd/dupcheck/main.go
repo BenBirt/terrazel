@@ -1,8 +1,8 @@
-// Command dupcheck is terrazel's build-time guard against variable-key
-// collisions across a terraform_deploy's `vars` dict and its `var_files`
+// Command dupcheck is rules_tofu's build-time guard against variable-key
+// collisions across a tf_deploy's `vars` dict and its `var_files`
 // entries.
 //
-// It is invoked from the `terraform_deploy` rule via a Bazel build action.
+// It is invoked from the `tf_deploy` rule via a Bazel build action.
 // Inputs:
 //   - --vars-key=<name>      (repeatable) — one entry per key in the deploy's
 //                                          `vars` dict, known statically.
@@ -48,7 +48,7 @@ func main() {
 	flag.Parse()
 
 	if err := run(*varsKeys, *varFiles, *stamp); err != nil {
-		fmt.Fprintln(os.Stderr, "terrazel: "+err.Error())
+		fmt.Fprintln(os.Stderr, "rules_tofu: "+err.Error())
 		os.Exit(1)
 	}
 }

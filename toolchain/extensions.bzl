@@ -3,7 +3,7 @@ them as a registered toolchain (one entry per supported platform).
 
 Downstream usage in MODULE.bazel:
 
-    tofu = use_extension("@terrazel//toolchain:extensions.bzl", "tofu")
+    tofu = use_extension("@rules_tofu//toolchain:extensions.bzl", "tofu")
     # tofu.version(version = "1.8.5")  # optional override
     use_repo(tofu, "tofu_toolchains")
 """
@@ -41,7 +41,7 @@ def _tofu_download_impl(repository_ctx):
     repository_ctx.file(
         "BUILD.bazel",
         content = """\
-load("@terrazel//toolchain:toolchain.bzl", "opentofu_toolchain")
+load("@rules_tofu//toolchain:toolchain.bzl", "opentofu_toolchain")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -77,7 +77,7 @@ def _tofu_hub_impl(repository_ctx):
             "toolchain(",
             "    name = \"{}_toolchain\",".format(platform_key),
             "    toolchain = \"@tofu_{}//:toolchain_impl\",".format(platform_key),
-            "    toolchain_type = \"@terrazel//toolchain:toolchain_type\",",
+            "    toolchain_type = \"@rules_tofu//toolchain:toolchain_type\",",
             "    exec_compatible_with = [",
             "        \"{}\",".format(os_constraint),
             "        \"{}\",".format(cpu_constraint),

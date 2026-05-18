@@ -4,8 +4,8 @@ To update, fetch the desired release's SHA256SUMS from
 https://github.com/opentofu/opentofu/releases and replace both DEFAULT_VERSION
 and KNOWN_VERSIONS below.
 
-TODO(terrazel): generate this file from SHA256SUMS rather than maintaining by hand.
-TODO(terrazel): replace download with a `rules_go` build-from-source so the
+TODO(rules_tofu): generate this file from SHA256SUMS rather than maintaining by hand.
+TODO(rules_tofu): replace download with a `rules_go` build-from-source so the
 toolchain is fully hermetic and cross-compilable.
 """
 
