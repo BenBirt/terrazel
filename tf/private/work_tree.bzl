@@ -82,8 +82,10 @@ def materialize(ctx, entries, tfvars_content = None):
     return outputs
 
 def materialize_plugin_tree(ctx, providers_depset):
-    """Symlink one provider binary per unique `(address, version)` into the
-    work tree's plugin dir using Terraform's canonical layout.
+    """Symlink provider binaries into the work tree's plugin directory.
+
+    Creates one symlink per unique `(address, version)` using Terraform's
+    canonical layout.
 
     Args:
       ctx: rule ctx. Must list `TOOLCHAIN_TYPE` in `toolchains` so

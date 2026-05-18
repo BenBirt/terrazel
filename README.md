@@ -83,7 +83,9 @@ tf_library(
 )
 ```
 
-See `examples/aws/` and `examples/gcp/` for full end-to-end uses.
+See `examples/hello/` for a minimal no-provider example that exercises
+`tf_library` and `tf_deploy` with no external dependencies. See
+`examples/aws/` and `examples/gcp/` for full end-to-end uses with providers.
 
 A `tf_deploy` may declare its own `providers = [...]`; the union
 of a deploy's direct providers and the providers contributed by its
@@ -122,6 +124,22 @@ tf_deploy(
     var_files = [":secrets"],   # keys in secrets.tfvars.json must not overlap with vars
 )
 ```
+
+The `data` attribute lets you place arbitrary files into the work tree so
+that Terraform's `file()` function can read them at runtime:
+
+```python
+tf_deploy(
+    name = "prod",
+    deps = [":network"],
+    vars = {"region": "us-east-1"},
+    data = ["//config:tls_cert.pem"],  # available as file("config/tls_cert.pem") in .tf files
+)
+```
+
+Files listed in `data` are symlinked into the work tree at their
+workspace-relative short path (e.g. `config/tls_cert.pem`), making them
+readable via Terraform's `file()` or `templatefile()` functions.
 
 Then:
 
@@ -172,8 +190,9 @@ not the run.
 State is persisted per-deploy at the deploy target's `$(RULEDIR)`, i.e.
 `bazel-bin/<package>/<name>.rules_tofu-state/` (already covered by the
 standard `bazel-*` gitignore and wiped by `bazel clean`). If the
-deploy declares a `backend "..." {}` block in any of its `.tf` files,
-the runner defers to that backend and skips the local-state flags.
+deploy declares a `backend "..." {}` or `cloud {}` block in any of its
+`.tf` files, the runner defers to that backend and skips the local-state
+flags.
 
 ## Module source paths
 

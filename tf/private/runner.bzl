@@ -7,8 +7,8 @@ passed as explicit CLI flags — no template substitutions inside the
 runner itself, no runfiles boilerplate in bash.
 """
 
-load(":providers.bzl", "TfDeployInfo")
 load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
+load(":providers.bzl", "TfDeployInfo")
 
 _RUNNER_BIN_LABEL = "//tf/private/cmd/runner:runner"
 
@@ -113,4 +113,3 @@ tf_runner = rule(
     },
     toolchains = [TOOLCHAIN_TYPE],
 )
-

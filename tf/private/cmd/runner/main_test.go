@@ -306,6 +306,186 @@ func TestRunner_ExtraArgsPassedToDestroy(t *testing.T) {
 	}
 }
 
+// TestRunner_StateFlags_Apply verifies that the apply invocation receives
+// -state= and -state-out= flags when no backend block is present.
+func TestRunner_StateFlags_Apply(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args, "--command=apply")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	// Expect: init, apply.
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, apply), got %d: %+v", len(invs), invs)
+	}
+	apply := invs[1]
+	if !apply.hasArg("apply") {
+		t.Errorf("second invocation should be 'apply', got args: %v", apply.args)
+	}
+	if !apply.hasArgWithPrefix("-state=") {
+		t.Errorf("apply invocation missing -state=, got args: %v", apply.args)
+	}
+	if !apply.hasArgWithPrefix("-state-out=") {
+		t.Errorf("apply invocation missing -state-out=, got args: %v", apply.args)
+	}
+}
+
+// TestRunner_StateFlags_Destroy verifies that the destroy invocation receives
+// -state= and -state-out= flags when no backend block is present.
+func TestRunner_StateFlags_Destroy(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	cmd.Args = append(cmd.Args, "--command=destroy")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	// Expect: init, destroy.
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, destroy), got %d: %+v", len(invs), invs)
+	}
+	destroy := invs[1]
+	if !destroy.hasArg("destroy") {
+		t.Errorf("second invocation should be 'destroy', got args: %v", destroy.args)
+	}
+	if !destroy.hasArgWithPrefix("-state=") {
+		t.Errorf("destroy invocation missing -state=, got args: %v", destroy.args)
+	}
+	if !destroy.hasArgWithPrefix("-state-out=") {
+		t.Errorf("destroy invocation missing -state-out=, got args: %v", destroy.args)
+	}
+}
+
+// backendTFContent is a helper that writes a .tf file with a terraform block
+// containing the given inner content into the package directory of the work
+// tree, and returns the path written.
+func backendTFContent(t *testing.T, cmd *exec.Cmd, content string) {
+	t.Helper()
+	var workTree string
+	for _, arg := range cmd.Args {
+		if strings.HasPrefix(arg, "--work-tree=") {
+			workTree = strings.TrimPrefix(arg, "--work-tree=")
+		}
+	}
+	if workTree == "" {
+		t.Fatal("could not find --work-tree flag in runner cmd args")
+	}
+	tfPath := filepath.Join(workTree, "mypkg", "backend_override.tf")
+	if err := os.WriteFile(tfPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRunner_BackendBlock_OmitsStateFlags verifies that when a terraform{}
+// backend "..." {} block is present, the runner does not pass -state= or
+// -state-out= to tofu.
+func TestRunner_BackendBlock_OmitsStateFlags(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	backendTFContent(t, cmd, `
+terraform {
+  backend "local" {}
+}
+`)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	if plan.hasArgWithPrefix("-state=") {
+		t.Errorf("plan invocation should not have -state= when backend block present, got args: %v", plan.args)
+	}
+	if plan.hasArgWithPrefix("-state-out=") {
+		t.Errorf("plan invocation should not have -state-out= when backend block present, got args: %v", plan.args)
+	}
+}
+
+// TestRunner_CloudBlock_OmitsStateFlags verifies that when a terraform{}
+// cloud {} block is present (the modern HCP Terraform alternative to backend),
+// the runner does not pass -state= or -state-out= to tofu.
+func TestRunner_CloudBlock_OmitsStateFlags(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	backendTFContent(t, cmd, `
+terraform {
+  cloud {}
+}
+`)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	if plan.hasArgWithPrefix("-state=") {
+		t.Errorf("plan invocation should not have -state= when cloud block present, got args: %v", plan.args)
+	}
+	if plan.hasArgWithPrefix("-state-out=") {
+		t.Errorf("plan invocation should not have -state-out= when cloud block present, got args: %v", plan.args)
+	}
+}
+
+// TestRunner_MissingBuildWorkspaceDirectory verifies that the runner exits
+// non-zero and prints an actionable message when BUILD_WORKSPACE_DIRECTORY
+// is not set (i.e. it was invoked outside of `bazel run`).
+func TestRunner_MissingBuildWorkspaceDirectory(t *testing.T) {
+	cmd, _, _ := setup(t, map[string]any{"region": "us-east-1"})
+	// Strip BUILD_WORKSPACE_DIRECTORY from the environment.
+	filtered := cmd.Env[:0]
+	for _, e := range cmd.Env {
+		if !strings.HasPrefix(e, "BUILD_WORKSPACE_DIRECTORY=") {
+			filtered = append(filtered, e)
+		}
+	}
+	cmd.Env = filtered
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected runner to fail when BUILD_WORKSPACE_DIRECTORY is unset, but it succeeded")
+	}
+	msg := string(out)
+	if !strings.Contains(msg, "BUILD_WORKSPACE_DIRECTORY") && !strings.Contains(msg, "bazel run") {
+		t.Errorf("expected output to mention BUILD_WORKSPACE_DIRECTORY or bazel run, got: %s", msg)
+	}
+}
+
+// TestRunner_MissingRequiredFlags verifies that omitting any single required
+// flag causes the runner to exit non-zero with a message naming the flag.
+func TestRunner_MissingRequiredFlags(t *testing.T) {
+	requiredFlags := []string{
+		"--tofu",
+		"--work-tree",
+		"--package-dir",
+		"--command",
+		"--state-dir",
+		"--plugin-dir",
+	}
+	for _, flagName := range requiredFlags {
+		flagName := flagName
+		t.Run(flagName, func(t *testing.T) {
+			cmd, _, _ := setup(t, map[string]any{"region": "us-east-1"})
+			// Remove the flag from Args, keeping all others.
+			filtered := cmd.Args[:1] // keep argv[0] (binary path)
+			for _, arg := range cmd.Args[1:] {
+				if strings.HasPrefix(arg, flagName+"=") || arg == flagName {
+					continue
+				}
+				filtered = append(filtered, arg)
+			}
+			cmd.Args = filtered
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected runner to fail when %s is omitted, but it succeeded", flagName)
+			}
+			if !strings.Contains(string(out), flagName) {
+				t.Errorf("expected output to mention %s, got: %s", flagName, out)
+			}
+		})
+	}
+}
+
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	data, err := json.Marshal(v)

@@ -36,8 +36,6 @@ register_toolchains("@tofu_toolchains//:all")
 # `providers = [...]`, not because the provider itself is unknown.
 tf_providers = use_extension("@rules_tofu//tf/providers:extensions.bzl", "tf_providers")
 tf_providers.provider(
-    source = "hashicorp/aws",
-    version = "5.70.0",
     sha256 = {
         "linux_amd64": "ef2a61e8112c3b5e70095508aadaadf077e904b62b9cfc22030337f773bba041",
         "linux_arm64": "19685d9f4c9ddcfa476a9a428c6c612be4a1b4e8e1198fbcbb76436b735284ee",
@@ -45,5 +43,7 @@ tf_providers.provider(
         "darwin_arm64": "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
         "windows_amd64": "3358ee6a2b24c982b7c83fac0af6898644d1bbdabf9c4e0589e91e427641ba88",
     },
+    source = "hashicorp/aws",
+    version = "5.70.0",
 )
 use_repo(tf_providers, "tf_providers_hashicorp_aws")
