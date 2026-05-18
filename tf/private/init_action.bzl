@@ -60,7 +60,14 @@ if [ -e "$CWD/.terraform.lock.hcl" ]; then
          "Lock files are managed implicitly via Bazel's provider pinning; remove it from srcs/data." 1>&2
     exit 1
 fi
-"$TOFU" -chdir="$CWD" init -backend=false -input=false -plugin-dir="$SCRATCH/$PLUGIN_DIR_REL"
+# Redirect init output: tofu init always generates a .terraform.lock.hcl and
+# emits "Installing provider" / "Incomplete lock file" warnings even with
+# -plugin-dir. There is no flag to suppress or skip lockfile generation
+# (the warning fires during checksum computation, before the file write, so
+# even symlinking .terraform.lock.hcl -> /dev/null would not help). The
+# lockfile lands in $SCRATCH and is discarded with it; we only need the
+# exit code.
+"$TOFU" -chdir="$CWD" init -backend=false -input=false -plugin-dir="$SCRATCH/$PLUGIN_DIR_REL" >/dev/null 2>&1
 "$TOFU" -chdir="$CWD" validate
 touch "$STAMP"
 """,
