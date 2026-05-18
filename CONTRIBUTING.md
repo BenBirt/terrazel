@@ -56,10 +56,11 @@ bazel test //... --test_tag_filters=fmt
 ## Starlark formatting
 
 All `.bzl` and `BUILD.bazel` files must be formatted with
-[buildifier](https://github.com/bazelbuild/buildtools/tree/main/buildifier):
+[buildifier](https://github.com/bazelbuild/buildtools/tree/main/buildifier),
+which is pinned as a dev dependency in `MODULE.bazel`:
 
 ```sh
-buildifier -r .
+bazel run @buildifier_prebuilt//:buildifier -- -r .
 ```
 
 CI enforces this; PRs with formatting violations will fail.
@@ -80,5 +81,5 @@ Use `claude/<short-description>` for AI-assisted branches,
 
 1. Fork the repo and create a branch.
 2. Make your changes and ensure `bazel build //...` and `bazel test //...` both pass.
-3. Run `buildifier -r .` and commit any formatting changes.
+3. Run `bazel run @buildifier_prebuilt//:buildifier -- -r .` and commit any formatting changes.
 4. Open a PR against `main` with a clear description of what changed and why.
