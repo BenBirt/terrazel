@@ -1,0 +1,32 @@
+load("@rules_tofu//tf:defs.bzl", "tf_library")
+load("@rules_tofu//tf/private:provider.bzl", "tf_provider")
+
+# Manually declaring two tf_provider targets with the same address but different versions
+# must fail during the aggregate provider check when building a tf_library/tf_deploy that depends on both.
+tf_provider(
+    name = "prov1",
+    address = "registry.opentofu.org/hashicorp/aws",
+    version = "5.70.0",
+    binaries = {
+        "main.tf": "linux_amd64",
+    },
+)
+
+tf_provider(
+    name = "prov2",
+    address = "registry.opentofu.org/hashicorp/aws",
+    version = "5.80.0",
+    binaries = {
+        "main.tf": "linux_amd64",
+    },
+)
+
+tf_library(
+    name = "lib",
+    srcs = ["main.tf"],
+    providers = [
+        ":prov1",
+        ":prov2",
+    ],
+    fmt_test = False,
+)

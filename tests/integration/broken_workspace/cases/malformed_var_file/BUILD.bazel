@@ -1,0 +1,16 @@
+load("@rules_tofu//tf:defs.bzl", "tf_deploy", "tf_library")
+
+# Referencing a var_file that contains malformed JSON must fail during the
+# duplicate key check at build time.
+tf_library(
+    name = "lib",
+    srcs = ["main.tf"],
+    fmt_test = False,
+)
+
+tf_deploy(
+    name = "deploy",
+    deps = [":lib"],
+    var_files = ["bad.tfvars.json"],
+    fmt_test = False,
+)

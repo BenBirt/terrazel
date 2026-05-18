@@ -14,10 +14,14 @@ tests/integration/
     ├── MODULE.bazel
     ├── .bazelversion
     └── cases/
+        ├── auto_tfvars_conflict/{BUILD.bazel, main.tf, rules_tofu.auto.tfvars.json}
+        ├── conflicting_providers/{BUILD.bazel, main.tf}
         ├── duplicate_vars/{BUILD.bazel, main.tf, extra.tfvars.json}
-        ├── validate_fails/{BUILD.bazel, main.tf}
+        ├── external_module_ref/{BUILD.bazel, main.tf}
+        ├── lock_file_smuggled/{BUILD.bazel, main.tf, .terraform.lock.hcl}
+        ├── malformed_var_file/{BUILD.bazel, main.tf, bad.tfvars.json}
         ├── missing_provider/{BUILD.bazel, main.tf}
-        └── lock_file_smuggled/{BUILD.bazel, main.tf, .terraform.lock.hcl}
+        └── validate_fails/{BUILD.bazel, main.tf}
 ```
 
 The child workspace packages are excluded from the parent Bazel via
@@ -50,25 +54,7 @@ rule-error wording tweaks; avoid quoting full sentences.
 
 ## Follow-ups
 
-Failure modes the rules raise that we don't cover yet. Same machinery —
-each is one new row plus a fixture directory:
+All core build-time negative failure modes are now fully tested!
 
-| Case | Source of error | Fragment |
-|---|---|---|
-| File collision between deps with same workspace path | `tf/private/work_tree.bzl:54-63` | `collision at workspace path` |
-| Conflicting provider versions across deps | `tf/private/work_tree.bzl:106-117` | `conflicting versions` |
-| `rules_tofu.auto.tfvars.json` in srcs | `tf/private/work_tree.bzl:70-77` | `collides with the generated` |
-| External-module file reference | `tf/private/work_tree.bzl:45-53` | `external Bazel module` |
-| Malformed JSON in `var_files` | `tf/private/cmd/dupcheck/main.go:96-104` | `parse:` |
-| Runner not invoked via `bazel run` | `tf/private/cmd/runner/main.go:86-90` | `BUILD_WORKSPACE_DIRECTORY` |
+The remaining non-build execution modes (`bazel run :deploy.plan` when run outside of the Bazel environment, or `tf_providers` module resolution errors) can be addressed in future testing passes if needed.
 
-The runner-not-via-`bazel-run` case needs a separate driver because the
-assertion is on `bazel run :<deploy>.plan`, not `bazel build`.
-
-`tf_providers` extension errors (bad source format, unknown
-platform key, ambiguous binary in
-`tf/providers/extensions.bzl`) fail during outer module
-resolution rather than at build time. Covering them needs a second
-sub-workspace whose `MODULE.bazel` is itself malformed plus a driver
-that runs e.g. `bazel mod graph` and asserts failure. Distinct enough
-that it's worth its own pass.
