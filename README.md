@@ -176,9 +176,7 @@ of plugins"), then runs the requested command:
 - **plan** — runs `tofu plan`, saving the plan artifact to
   `<state-dir>/tfplan`.
 - **apply** — runs `tofu apply`, which plans and then prompts for
-  approval. Pass `--auto-approve` to skip the prompt; in that mode the
-  runner saves a plan artifact first and applies it non-interactively
-  (so the applied changes match the reviewed plan exactly).
+  approval. Pass `--auto-approve` to skip the prompt.
 - **destroy** — runs `tofu destroy`, prompting for approval. Pass
   `--auto-approve` to skip the prompt.
 

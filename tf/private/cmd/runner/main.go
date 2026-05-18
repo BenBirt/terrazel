@@ -167,11 +167,18 @@ func runTofu(env []string, cwd string, args ...string) error {
 	return cmd.Run()
 }
 
-// hasBackend reports whether any .tf file in the deploy's package
-// declares a `backend "..." {}` or `cloud {}` block nested inside a
-// top-level `terraform {}` block. Either construct means the workspace
-// uses a remote/cloud state backend, and local -state/-state-out flags
-// should be omitted from the runner invocation.
+// hasBackend reports whether any .tf file in the deploy's package directory
+// declares a `backend "..." {}` or `cloud {}` block nested inside a top-level
+// `terraform {}` block. Either construct means the workspace uses a remote/cloud
+// state backend, and local -state/-state-out flags should be omitted from the
+// runner invocation.
+//
+// Only the package directory (cwd) is scanned — not the full work tree. This is
+// intentional: Terraform reads backend configuration from the root module only,
+// which is the directory where `tofu init` runs. Transitive library deps are
+// materialised at their own workspace-relative paths (e.g. sibling directories)
+// and are not the root module, so backend blocks in those files do not affect
+// the root module's state backend.
 func hasBackend(cwd string) bool {
 	entries, err := os.ReadDir(cwd)
 	if err != nil {

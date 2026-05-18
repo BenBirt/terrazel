@@ -258,20 +258,20 @@
     "//tf/providers:extensions.bzl%tf_providers": {
       "general": {
         "bzlTransitiveDigest": "2ap4Ih+gTlPz3Wx9+kiNo8UaapwmFgaRUFUO1JqLuA8=",
-        "usagesDigest": "2P7ztmTx9ec3wx07bDrZE6S7Bu+FvC1MR0Q1gP02Ye8=",
+        "usagesDigest": "7YlIVxVP76pqshbGDzBW96b/hUt53jUQqLNWzOkfuik=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "tf_providers_hashicorp_aws": {
             "repoRuleId": "@@//tf/providers:extensions.bzl%_tf_provider_download",
             "attributes": {
               "source": "hashicorp/aws",
-              "version": "5.70.0",
+              "version": "6.45.0",
               "sha256": {
-                "linux_amd64": "ef2a61e8112c3b5e70095508aadaadf077e904b62b9cfc22030337f773bba041",
-                "linux_arm64": "19685d9f4c9ddcfa476a9a428c6c612be4a1b4e8e1198fbcbb76436b735284ee",
-                "darwin_amd64": "79bf8fb8f37c308742e287694a9de081ff8502b065a390d1bcfbd241b4eca203",
-                "darwin_arm64": "c2cc728cb18ffd5c4814a10c203452c71f5ab0c46d68f9aa9183183fa60afd87",
-                "windows_amd64": "3358ee6a2b24c982b7c83fac0af6898644d1bbdabf9c4e0589e91e427641ba88"
+                "linux_amd64": "c646eeef45ca8c1a9e2a8768358f5a8235454c629864e481f6afc6421d6781cc",
+                "linux_arm64": "4f0cafa2e609f373e8ba7fdc4172c93e57b1b149165095d23447894973da8c94",
+                "darwin_amd64": "edfa6e69eae9d0cacb17d1791676604a90139bfe21f0b7347f8f71250e15438a",
+                "darwin_arm64": "76451d10c7857a321df8b08d5c160141c3d4bb5f31a5aa5d1a7e597f2286e96b",
+                "windows_amd64": "cbaac79b0d6af1a6c685176711fe9326bd72f2c58dfb1dc6c10854b1f132f26e"
               }
             }
           },
@@ -279,13 +279,13 @@
             "repoRuleId": "@@//tf/providers:extensions.bzl%_tf_provider_download",
             "attributes": {
               "source": "hashicorp/google",
-              "version": "5.45.0",
+              "version": "7.32.0",
               "sha256": {
-                "linux_amd64": "98803e908ddf283a6967cc213b34bf0c04ba866a02a3e516db6462053625aad5",
-                "linux_arm64": "4a8cb3569e5006da3bc631bc340f0c6020f3d6140c4eb5821d92d0ff23fde2dd",
-                "darwin_amd64": "813d3f741280a75baea1bfb0eeaaf4c2910218bd7e3607749a1a86d89a17c4dd",
-                "darwin_arm64": "bc47ab6583e549cd86f2fa6a69cdfdf85b795e1184b0e5e25b194bbf82377b32",
-                "windows_amd64": "d0a8e77af1f1a1fab9f7867cc8b2b700dd988398093a7a3e3273dac6875c161a"
+                "linux_amd64": "42fece780ef909136213762731c945d59c58dbaf92f64a46989102da9ebfa998",
+                "linux_arm64": "091afeeeb58035f26ebaec34755a15d56e3229c4ce6db2745c52ba2593204a30",
+                "darwin_amd64": "2e531cf6f3af847104df65675ebd9c9a7450ba91d8d21ff6ed04eeab6a5684e2",
+                "darwin_arm64": "ad3d4419561d19e88b72ad4bedbbc73ee77f20acb594261be8f716bf1a89f947",
+                "windows_amd64": "a62e09bd551de8ea74b68c1eb44f9d7d0dc56957811915d46ec0a28254a30e0b"
               }
             }
           }
@@ -294,52 +294,52 @@
     },
     "//toolchain:extensions.bzl%tofu": {
       "general": {
-        "bzlTransitiveDigest": "46AZi1GQNIG1L+lYY6FD+wC4X9yy+T9yOsFUa88q7Co=",
+        "bzlTransitiveDigest": "WmqdvEibLf9RNA5wkgHAD3/TOm73je1YLuFmQHqYUDw=",
         "usagesDigest": "CjW86UdZEo8LkSe7QkaoBsJSpRELuBlgpdDlQwIXOHs=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "tofu_linux_amd64": {
             "repoRuleId": "@@//toolchain:extensions.bzl%_tofu_download",
             "attributes": {
-              "version": "1.8.5",
+              "version": "1.12.0",
               "platform_key": "linux_amd64",
-              "sha256": "e2951ba6be8ae9427aabbd5c6f243855e8b526cb2ae6bc33a05dae22d7e82632",
+              "sha256": "8d7650fd42b6d790f9f747604393ccd0a9035376bccc4f1688b905d7c5bb1137",
               "exe_suffix": ""
             }
           },
           "tofu_linux_arm64": {
             "repoRuleId": "@@//toolchain:extensions.bzl%_tofu_download",
             "attributes": {
-              "version": "1.8.5",
+              "version": "1.12.0",
               "platform_key": "linux_arm64",
-              "sha256": "2535e8d4979806cbf79a1b704dccf1fae45b4d50ccaee3e54c1771044db4a573",
+              "sha256": "466bf912404b4ab0f0b3a043073d68ad34f11d55ad7a483957d94f0733169f8d",
               "exe_suffix": ""
             }
           },
           "tofu_darwin_amd64": {
             "repoRuleId": "@@//toolchain:extensions.bzl%_tofu_download",
             "attributes": {
-              "version": "1.8.5",
+              "version": "1.12.0",
               "platform_key": "darwin_amd64",
-              "sha256": "cb6d1b949691e50bed6c9cc17aefc999cf27e52200521efa9f107ce3ee08260f",
+              "sha256": "761dc6688325721be230f95b94382bc06ffe59d87cb25c94ef8a37d9cb0c0014",
               "exe_suffix": ""
             }
           },
           "tofu_darwin_arm64": {
             "repoRuleId": "@@//toolchain:extensions.bzl%_tofu_download",
             "attributes": {
-              "version": "1.8.5",
+              "version": "1.12.0",
               "platform_key": "darwin_arm64",
-              "sha256": "c77e545ab847c0d6acd322c010f457e1a30448476945c04074a48882c4b86dfe",
+              "sha256": "1b09890dc4ed842bebb55b8c958943b28bc025b3728ee2e5f848c30ee3406841",
               "exe_suffix": ""
             }
           },
           "tofu_windows_amd64": {
             "repoRuleId": "@@//toolchain:extensions.bzl%_tofu_download",
             "attributes": {
-              "version": "1.8.5",
+              "version": "1.12.0",
               "platform_key": "windows_amd64",
-              "sha256": "8bcd1317392a7b1ce149c5dafc886497219f560527fe10ed0d58863120d59e67",
+              "sha256": "7253abf6ce9c0e88e0cc188c5c883e02353b6c5ffcf2125e6c307348ca223df0",
               "exe_suffix": ".exe"
             }
           },

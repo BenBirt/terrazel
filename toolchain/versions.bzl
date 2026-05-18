@@ -9,12 +9,19 @@ TODO(rules_tofu): replace download with a `rules_go` build-from-source so the
 toolchain is fully hermetic and cross-compilable.
 """
 
-DEFAULT_VERSION = "1.8.5"
+DEFAULT_VERSION = "1.12.0"
 
 # Map of version -> { "<os>_<arch>": "<sha256>" }
 # Keys use Bazel-style os/cpu names (see PLATFORMS below for the mapping to the
 # OpenTofu release asset naming, which differs only in not having a separator).
 KNOWN_VERSIONS = {
+    "1.12.0": {
+        "linux_amd64": "8d7650fd42b6d790f9f747604393ccd0a9035376bccc4f1688b905d7c5bb1137",
+        "linux_arm64": "466bf912404b4ab0f0b3a043073d68ad34f11d55ad7a483957d94f0733169f8d",
+        "darwin_amd64": "761dc6688325721be230f95b94382bc06ffe59d87cb25c94ef8a37d9cb0c0014",
+        "darwin_arm64": "1b09890dc4ed842bebb55b8c958943b28bc025b3728ee2e5f848c30ee3406841",
+        "windows_amd64": "7253abf6ce9c0e88e0cc188c5c883e02353b6c5ffcf2125e6c307348ca223df0",
+    },
     "1.8.5": {
         "linux_amd64": "e2951ba6be8ae9427aabbd5c6f243855e8b526cb2ae6bc33a05dae22d7e82632",
         "linux_arm64": "2535e8d4979806cbf79a1b704dccf1fae45b4d50ccaee3e54c1771044db4a573",
