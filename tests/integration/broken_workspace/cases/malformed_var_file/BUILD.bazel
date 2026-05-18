@@ -10,7 +10,7 @@ tf_library(
 
 tf_deploy(
     name = "deploy",
-    deps = [":lib"],
-    var_files = ["bad.tfvars.json"],
     fmt_test = False,
+    var_files = ["bad.tfvars.json"],
+    deps = [":lib"],
 )

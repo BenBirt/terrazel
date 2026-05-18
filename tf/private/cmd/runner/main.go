@@ -23,6 +23,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 )
 
 // stringList is a repeatable string flag (e.g. --var-file can appear multiple times).
@@ -177,22 +180,34 @@ func hasBackend(cwd string) bool {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".tf" {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(cwd, e.Name()))
+		path := filepath.Join(cwd, e.Name())
+		b, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		if containsBackendBlock(b) {
+		if containsBackendBlock(b, path) {
 			return true
 		}
 	}
 	return false
 }
 
-func containsBackendBlock(b []byte) bool {
-	s := string(b)
-	for i := 0; i+9 < len(s); i++ {
-		if (i == 0 || s[i-1] == '\n') && s[i:i+8] == "backend " && s[i+8] == '"' {
-			return true
+func containsBackendBlock(b []byte, filename string) bool {
+	file, diags := hclsyntax.ParseConfig(b, filename, hcl.InitialPos)
+	if diags.HasErrors() {
+		return false
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		return false
+	}
+	for _, block := range body.Blocks {
+		if block.Type == "terraform" {
+			for _, nestedBlock := range block.Body.Blocks {
+				if nestedBlock.Type == "backend" {
+					return true
+				}
+			}
 		}
 	}
 	return false

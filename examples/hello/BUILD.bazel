@@ -9,8 +9,8 @@ tf_library(
 
 tf_deploy(
     name = "hello",
-    deps = [":greet_lib"],
     vars = {
         "name": "world",
     },
+    deps = [":greet_lib"],
 )

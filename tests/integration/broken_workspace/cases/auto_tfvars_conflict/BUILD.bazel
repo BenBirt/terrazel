@@ -11,7 +11,7 @@ tf_library(
 
 tf_deploy(
     name = "deploy",
-    deps = [":lib"],
-    vars = {"foo": "bar"},
     fmt_test = False,
+    vars = {"foo": "bar"},
+    deps = [":lib"],
 )

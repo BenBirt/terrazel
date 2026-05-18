@@ -4,10 +4,6 @@ The deploy rule calls `tf_check_var_files(...)` to attach a check stamp
 to its outputs, so any overlap between keys in `vars` and `var_files`
 (or between two `var_files` entries) fails at `bazel build` time (with
 action caching) rather than later at `bazel run` time.
-
-Because `var_files` is restricted to `.tfvars.json` at the rule level,
-the action's JSON-only parser is a complete check; no HCL parser is
-required.
 """
 
 DUPCHECK_BIN = "//tf/private/cmd/dupcheck:dupcheck"
