@@ -65,18 +65,6 @@ bazel run @buildifier_prebuilt//:buildifier -- -r .
 
 CI enforces this; PRs with formatting violations will fail.
 
-## Commit style
-
-- Imperative subject line, ≤ 72 characters.
-- Blank line between subject and body.
-- Reference GitHub issues/PRs where relevant.
-
-## Branch naming
-
-Use `claude/<short-description>` for AI-assisted branches,
-`feat/<short-description>` for feature branches, and
-`fix/<short-description>` for bug fixes.
-
 ## Opening a PR
 
 1. Fork the repo and create a branch.
