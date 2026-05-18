@@ -1,0 +1,4 @@
+# The broken_workspace integration test fixture intentionally contains Starlark
+# files that violate bzl-visibility rules (that's the point of the test).
+# Exclude it from buildifier's recursive lint walk to avoid false positives.
+tests/integration/broken_workspace

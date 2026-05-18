@@ -37,20 +37,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install buildifier
-        run: |
-          go install github.com/bazelbuild/buildtools/buildifier@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
 
       - name: Run buildifier (format check)
-        run: |
-          buildifier --mode=check -r \
-            --path=. \
-            $(find . -name "*.bzl" -o -name "*.bazel" -o -name "BUILD" -o -name "WORKSPACE" \
-              | grep -v tests/integration/broken_workspace)
+        run: bazel run @buildifier_prebuilt//:buildifier -- -mode=check -r .
 
       - name: Run buildifier (lint warnings)
-        run: |
-          buildifier --lint=warn -r \
-            $(find . -name "*.bzl" -o -name "*.bazel" -o -name "BUILD" -o -name "WORKSPACE" \
-              | grep -v tests/integration/broken_workspace)
+        run: bazel run @buildifier_prebuilt//:buildifier -- -lint=warn -r .
