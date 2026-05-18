@@ -22,7 +22,7 @@ provider "aws" {
 
   # Real credentials are resolved at plan/apply time via the usual AWS
   # provider lookup (env vars, shared credentials file, etc.). `tofu validate`
-  # — which terrazel runs at `bazel build` time — does not contact AWS.
+  # — which rules_tofu runs at `bazel build` time — does not contact AWS.
 }
 
 resource "aws_s3_bucket" "example" {

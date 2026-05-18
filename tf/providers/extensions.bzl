@@ -1,15 +1,15 @@
 """Bzlmod module extension that downloads pinned OpenTofu/Terraform provider
-plugins and exposes them as `terraform_provider` build targets, ready to be
-referenced from `terraform_library(providers = [...])` and
-`terraform_deploy(providers = [...])`.
+plugins and exposes them as `tf_provider` build targets, ready to be
+referenced from `tf_library(providers = [...])` and
+`tf_deploy(providers = [...])`.
 
 Downstream usage in MODULE.bazel:
 
-    terraform_providers = use_extension(
-        "@terrazel//terraform/providers:extensions.bzl",
-        "terraform_providers",
+    tf_providers = use_extension(
+        "@rules_tofu//tf/providers:extensions.bzl",
+        "tf_providers",
     )
-    terraform_providers.provider(
+    tf_providers.provider(
         source = "hashicorp/aws",
         version = "5.70.0",
         sha256 = {
@@ -20,11 +20,11 @@ Downstream usage in MODULE.bazel:
             "windows_amd64": "...",
         },
     )
-    use_repo(terraform_providers, "terraform_providers_hashicorp_aws")
+    use_repo(tf_providers, "tf_providers_hashicorp_aws")
 
 The repo name is derived deterministically from `source`: the `<ns>/<name>`
-pair becomes `terraform_providers_<ns>_<name>` (e.g. `hashicorp/aws` →
-`terraform_providers_hashicorp_aws`).
+pair becomes `tf_providers_<ns>_<name>` (e.g. `hashicorp/aws` →
+`tf_providers_hashicorp_aws`).
 Callers cannot override this name.
 
 When multiple modules in the dependency graph request the same provider (same
@@ -39,8 +39,8 @@ declared that version. If two modules provide conflicting sha256 values for
 the same platform at the same version, the extension fails with a clear
 error.
 
-The target `@terraform_providers_<ns>_<name>//:provider` then carries
-`TerraformProviderInfo` and is passed to `terraform_library`/`terraform_deploy`
+The target `@tf_providers_<ns>_<name>//:provider` then carries
+`TfProviderInfo` and is passed to `tf_library`/`tf_deploy`
 via their `providers` attribute. Bazel's MODULE.bazel.lock pins the resolved
 SHAs, so the provider tree is reproducible and is fetched once per workspace.
 
@@ -54,7 +54,7 @@ added later behind a `url_template` attribute.
 
 # Default plugin-dir host segment. OpenTofu canonicalizes `source = "<ns>/<name>"`
 # in `required_providers` to `registry.opentofu.org/<ns>/<name>` and looks for
-# plugins under `<plugin-dir>/registry.opentofu.org/...`. terrazel uses OpenTofu,
+# plugins under `<plugin-dir>/registry.opentofu.org/...`. rules_tofu uses OpenTofu,
 # so the vendored plugin tree mirrors that layout.
 _DEFAULT_HOST = "registry.opentofu.org"
 
@@ -84,9 +84,9 @@ def _split_platform_key(platform_key):
 def _repo_name_from_source(source):
     """Derive the canonical Bazel repository name from a provider source.
 
-    `hashicorp/aws` → `terraform_providers_hashicorp_aws`.
+    `hashicorp/aws` → `tf_providers_hashicorp_aws`.
     """
-    return "terraform_providers_" + source.replace("/", "_")
+    return "tf_providers_" + source.replace("/", "_")
 
 def _parse_version(version):
     """Parse a version string into a list of integers for comparison.
@@ -134,7 +134,7 @@ def _format_binaries_dict(entries):
     lines.append("    },")
     return "\n".join(lines)
 
-def _terraform_provider_download_impl(repository_ctx):
+def _tf_provider_download_impl(repository_ctx):
     source = repository_ctx.attr.source
     version = repository_ctx.attr.version
     sha256 = repository_ctx.attr.sha256
@@ -142,7 +142,7 @@ def _terraform_provider_download_impl(repository_ctx):
 
     if namespace != "hashicorp":
         fail(
-            ("terraform_providers.provider `{}` has source `{}`: only providers from " +
+            ("tf_providers.provider `{}` has source `{}`: only providers from " +
              "the `hashicorp/` namespace (served via releases.hashicorp.com) are " +
              "currently supported. Support for other registries can be added by " +
              "extending the extension with a `url_template` attribute.").format(
@@ -152,7 +152,7 @@ def _terraform_provider_download_impl(repository_ctx):
         )
 
     if not sha256:
-        fail("terraform_providers.provider `{}` must declare at least one platform in `sha256`".format(
+        fail("tf_providers.provider `{}` must declare at least one platform in `sha256`".format(
             repository_ctx.attr.name,
         ))
 
@@ -160,7 +160,7 @@ def _terraform_provider_download_impl(repository_ctx):
     entries = []
     for platform_key in sorted(sha256.keys()):
         if platform_key not in _EXE_SUFFIX:
-            fail("terraform_providers.provider `{}` declares unknown platform `{}`. Known: {}".format(
+            fail("tf_providers.provider `{}` declares unknown platform `{}`. Known: {}".format(
                 repository_ctx.attr.name,
                 platform_key,
                 sorted(_EXE_SUFFIX.keys()),
@@ -222,7 +222,7 @@ def _terraform_provider_download_impl(repository_ctx):
 
     # Extracted binaries live in nested directories; Bazel doesn't auto-expose
     # them as source labels, so the `label_keyed_string_dict` on
-    # `terraform_provider` couldn't resolve them without an explicit
+    # `tf_provider` couldn't resolve them without an explicit
     # `exports_files()`.
     exports_lines = ["exports_files(["]
     for binary_path, _ in entries:
@@ -233,13 +233,13 @@ def _terraform_provider_download_impl(repository_ctx):
     repository_ctx.file(
         "BUILD.bazel",
         content = """\
-load("@terrazel//terraform/private:provider.bzl", "terraform_provider")
+load("@rules_tofu//tf/private:provider.bzl", "tf_provider")
 
 package(default_visibility = ["//visibility:public"])
 
 {exports}
 
-terraform_provider(
+tf_provider(
     name = "provider",
     address = "{address}",
     version = "{version}",
@@ -254,8 +254,8 @@ terraform_provider(
         executable = False,
     )
 
-_terraform_provider_download = repository_rule(
-    implementation = _terraform_provider_download_impl,
+_tf_provider_download = repository_rule(
+    implementation = _tf_provider_download_impl,
     attrs = {
         "source": attr.string(mandatory = True),
         "version": attr.string(mandatory = True),
@@ -282,7 +282,7 @@ _provider_tag = tag_class(
     },
 )
 
-def _terraform_providers_extension_impl(module_ctx):
+def _tf_providers_extension_impl(module_ctx):
     # Phase 1: Collect all provider tags into a flat list of structs,
     # then group by source.
     all_tags = []
@@ -341,14 +341,14 @@ def _terraform_providers_extension_impl(module_ctx):
 
         # Phase 3: Create the repository.
         repo_name = _repo_name_from_source(source)
-        _terraform_provider_download(
+        _tf_provider_download(
             name = repo_name,
             source = source,
             version = resolved_version,
             sha256 = merged_sha256,
         )
 
-terraform_providers = module_extension(
-    implementation = _terraform_providers_extension_impl,
+tf_providers = module_extension(
+    implementation = _tf_providers_extension_impl,
     tag_classes = {"provider": _provider_tag},
 )

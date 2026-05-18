@@ -1,4 +1,4 @@
-"""Bazel-in-Bazel negative tests: assert that misusing the terrazel rules
+"""Bazel-in-Bazel negative tests: assert that misusing the rules_tofu rules
 fails with a stable, user-visible error message.
 
 Each case names a target inside the sub-workspace under

@@ -28,7 +28,7 @@ provider "google" {
 
   # Credentials are resolved at plan/apply time via the usual GCP provider
   # lookup (GOOGLE_APPLICATION_CREDENTIALS, gcloud ADC, etc.). `tofu validate`
-  # — which terrazel runs at `bazel build` time — does not contact GCP.
+  # — which rules_tofu runs at `bazel build` time — does not contact GCP.
 }
 
 resource "google_storage_bucket" "example" {

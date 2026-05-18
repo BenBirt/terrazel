@@ -60,17 +60,17 @@ unaffected. Locally, exercise the parts that don't pull in the runner:
 - `bazel test //examples/...:all` (fmt_check tests only)
 - Runner unit tests outside Bazel: copy `main.go` + `main_test.go` to a
   scratch dir with a trivial `go.mod` and `go test ./...` (the canonical
-  Bazel run is `bazel test //terraform/private/cmd/runner:runner_test`,
+  Bazel run is `bazel test //tf/private/cmd/runner:runner_test`,
   which needs network).
 
 ## Invariants — don't regress these
 
 - No `.terraform.lock.hcl` is generated, shipped, or accepted in
   `srcs`/`data`. `MODULE.bazel.lock` + the per-platform `sha256` on each
-  `terraform_providers.provider(...)` tag is the sole pinning layer.
+  `tf_providers.provider(...)` tag is the sole pinning layer.
   `init_action.bzl` fails loudly if a lock file slips into the work tree;
   don't relax that check.
-- `terraform_library` validates inline — the validate stamp goes in
+- `tf_library` validates inline — the validate stamp goes in
   `DefaultInfo.files` and `bazel build :foo_lib` is the validation
   contract. Don't add a `:foo.validate` sub-target or a `validate_test`
   macro flag. `bazel query 'kind("test", //...)'` should only return
@@ -85,7 +85,7 @@ unaffected. Locally, exercise the parts that don't pull in the runner:
 - The runner expects `--plugin-dir` to be required, and `os.MkdirAll`s
   it on first use so the zero-providers case still presents tofu with
   an extant directory. Don't make the flag optional.
-- Shared materialization helpers live in `terraform/private/work_tree.bzl`
+- Shared materialization helpers live in `tf/private/work_tree.bzl`
   (`materialize`, `materialize_plugin_tree`, `work_tree_root`,
   `PLUGIN_DIR_RELPATH`). Both `library.bzl` and `deploy.bzl` should go
   through them; don't reintroduce inline copies.

@@ -1,13 +1,13 @@
-load("@terrazel//terraform:defs.bzl", "terraform_deploy", "terraform_library")
+load("@rules_tofu//tf:defs.bzl", "tf_deploy", "tf_library")
 
 package(default_visibility = ["//visibility:public"])
 
-terraform_library(
+tf_library(
     name = "greet_lib",
     srcs = ["main.tf"],
 )
 
-terraform_deploy(
+tf_deploy(
     name = "hello",
     deps = [":greet_lib"],
     vars = {

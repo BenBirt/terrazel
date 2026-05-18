@@ -1,11 +1,11 @@
-"""Work tree materialization shared between `terraform_library` and
-`terraform_deploy`.
+"""Work tree materialization shared between `tf_library` and
+`tf_deploy`.
 
 A "work tree" is the directory under `bazel-bin/<pkg>/<name>.work/` into
 which a rule symlinks every transitive `.tf`/data file at its
 workspace-relative path, plus (for deploys) a generated
-`terrazel.auto.tfvars.json`, plus the vendored provider plugin tree under
-`.terrazel-plugins/`. `tofu init -plugin-dir=<plugin_tree>` then sees a
+`rules_tofu.auto.tfvars.json`, plus the vendored provider plugin tree under
+`.rules_tofu-plugins/`. `tofu init -plugin-dir=<plugin_tree>` then sees a
 self-contained tree that mirrors a real Terraform working directory.
 
 `materialize(...)` handles the .tf/data half (with optional tfvars).
@@ -17,14 +17,14 @@ load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 # Path within a work tree at which we materialize provider plugin binaries.
 # Layout under this root follows Terraform's standard plugin-dir convention:
 # `<host>/<namespace>/<name>/<version>/<os>_<arch>/<binary>`.
-PLUGIN_DIR_RELPATH = ".terrazel-plugins"
+PLUGIN_DIR_RELPATH = ".rules_tofu-plugins"
 
 def materialize(ctx, entries, tfvars_content = None):
     """Materialize a work tree under `<pkg>/<name>.work/`.
 
     For each `struct(path, file)` in `entries`, declares `<name>.work/<path>`
     and symlinks it to `file`. If `tfvars_content` is non-None, also writes
-    `<name>.work/<package>/terrazel.auto.tfvars.json` with that content.
+    `<name>.work/<package>/rules_tofu.auto.tfvars.json` with that content.
 
     Args:
       ctx: rule ctx.
@@ -68,10 +68,10 @@ def materialize(ctx, entries, tfvars_content = None):
         outputs.append(out)
 
     if tfvars_content != None:
-        tfvars_path = work_prefix + "/" + ctx.label.package + "/terrazel.auto.tfvars.json"
+        tfvars_path = work_prefix + "/" + ctx.label.package + "/rules_tofu.auto.tfvars.json"
         if tfvars_path[len(work_prefix) + 1:] in seen:
             fail(
-                "`{}` collides with the generated terrazel.auto.tfvars.json. ".format(
+                "`{}` collides with the generated rules_tofu.auto.tfvars.json. ".format(
                     seen[tfvars_path[len(work_prefix) + 1:]].path,
                 ) + "Rename or remove that file; deploy `vars` is the sole producer of tfvars.",
             )
@@ -88,7 +88,7 @@ def materialize_plugin_tree(ctx, providers_depset):
     Args:
       ctx: rule ctx. Must list `TOOLCHAIN_TYPE` in `toolchains` so
           `tofu.platform_key` is available.
-      providers_depset: depset[TerraformProviderInfo].
+      providers_depset: depset[TfProviderInfo].
 
     Returns:
       list[File]: declared symlink outputs (possibly empty).

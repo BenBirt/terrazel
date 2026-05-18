@@ -1,24 +1,24 @@
-load("@terrazel//terraform:defs.bzl", "terraform_deploy", "terraform_library")
+load("@rules_tofu//tf:defs.bzl", "tf_deploy", "tf_library")
 
 package(default_visibility = ["//visibility:public"])
 
 # Reusable library declaring the AWS provider it needs. Any deploy that
-# depends on it inherits the provider through TerraformLibraryInfo.providers.
-terraform_library(
+# depends on it inherits the provider through TfLibraryInfo.providers.
+tf_library(
     name = "s3_bucket_lib",
     srcs = ["main.tf"],
-    providers = ["@terraform_providers_hashicorp_aws//:provider"],
+    providers = ["@tf_providers_hashicorp_aws//:provider"],
 )
 
 # Root invocation that binds variable values. `bazel build :s3_bucket` runs
 # `tofu init -backend=false && tofu validate` offline against the vendored
 # provider tree. `bazel run :s3_bucket.plan` then runs a real plan; AWS
 # credentials are picked up by the provider at that point.
-terraform_deploy(
+tf_deploy(
     name = "s3_bucket",
     deps = [":s3_bucket_lib"],
     vars = {
         "region": "us-east-1",
-        "bucket_name": "terrazel-example-bucket",
+        "bucket_name": "rules_tofu-example-bucket",
     },
 )

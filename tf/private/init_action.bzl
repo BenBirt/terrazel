@@ -25,7 +25,7 @@ def tf_init_validate(ctx, work_tree_files, work_tree_root, package_dir, plugin_d
       package_dir: string, workspace-relative directory inside the work tree
           that tofu should cd into before running init/validate.
       plugin_dir_relpath: string, path under the work tree root where the
-          vendored provider tree lives (e.g. `.terrazel-plugins`). Pinned via
+          vendored provider tree lives (e.g. `.rules_tofu-plugins`). Pinned via
           `-plugin-dir` so init runs offline.
 
     Returns:
@@ -51,12 +51,12 @@ WORK_TREE_ROOT=$2
 PACKAGE_DIR=$3
 PLUGIN_DIR_REL=$4
 STAMP=$5
-SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/terrazel-validate-XXXXXX")
+SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/rules_tofu-validate-XXXXXX")
 cp -RL "$WORK_TREE_ROOT"/. "$SCRATCH"/
 mkdir -p "$SCRATCH/$PLUGIN_DIR_REL"
 CWD="$SCRATCH/$PACKAGE_DIR"
 if [ -e "$CWD/.terraform.lock.hcl" ]; then
-    echo "terrazel: refusing to validate: .terraform.lock.hcl present in work tree under $PACKAGE_DIR. " \\
+    echo "rules_tofu: refusing to validate: .terraform.lock.hcl present in work tree under $PACKAGE_DIR. " \\
          "Lock files are managed implicitly via Bazel's provider pinning; remove it from srcs/data." 1>&2
     exit 1
 fi

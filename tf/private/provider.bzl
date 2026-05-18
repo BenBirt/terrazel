@@ -1,26 +1,26 @@
-"""`terraform_provider` rule.
+"""`tf_provider` rule.
 
-A `terraform_provider` target wraps the per-platform binaries of a single
+A `tf_provider` target wraps the per-platform binaries of a single
 OpenTofu/Terraform provider plugin (e.g. `hashicorp/aws` at a given version).
 
-It is intended to be instantiated by the `terraform_providers` module
-extension (see `//terraform/providers:extensions.bzl`); end users do not
-write `terraform_provider(...)` rules directly. Instead, they declare the
+It is intended to be instantiated by the `tf_providers` module
+extension (see `//tf/providers:extensions.bzl`); end users do not
+write `tf_provider(...)` rules directly. Instead, they declare the
 provider in MODULE.bazel and reference the resulting `@<repo>//:provider`
-label from a `terraform_library(providers = [...])` or
-`terraform_deploy(providers = [...])` attribute.
+label from a `tf_library(providers = [...])` or
+`tf_deploy(providers = [...])` attribute.
 """
 
-load(":providers.bzl", "TerraformProviderInfo")
+load(":providers.bzl", "TfProviderInfo")
 
 visibility(["public"])
 
-def _terraform_provider_impl(ctx):
+def _tf_provider_impl(ctx):
     binaries = {}
     for tgt, platform_key in ctx.attr.binaries.items():
         files = tgt.files.to_list()
         if len(files) != 1:
-            fail("terraform_provider `{}` binary for {} must be a single file, got {}".format(
+            fail("tf_provider `{}` binary for {} must be a single file, got {}".format(
                 ctx.label,
                 platform_key,
                 [f.path for f in files],
@@ -29,15 +29,15 @@ def _terraform_provider_impl(ctx):
 
     return [
         DefaultInfo(files = depset(direct = binaries.values())),
-        TerraformProviderInfo(
+        TfProviderInfo(
             address = ctx.attr.address,
             version = ctx.attr.version,
             binaries = binaries,
         ),
     ]
 
-terraform_provider = rule(
-    implementation = _terraform_provider_impl,
+tf_provider = rule(
+    implementation = _tf_provider_impl,
     attrs = {
         "address": attr.string(
             mandatory = True,
@@ -56,6 +56,6 @@ terraform_provider = rule(
                   "relative to the work tree's plugin-dir root.",
         ),
     },
-    provides = [TerraformProviderInfo],
+    provides = [TfProviderInfo],
     doc = "Wraps the per-platform binaries of a single OpenTofu/Terraform provider plugin.",
 )
