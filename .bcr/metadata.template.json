@@ -1,0 +1,13 @@
+{
+    "homepage": "https://github.com/BenBirt/rules_tofu",
+    "maintainers": [
+        {
+            "name": "Ben Birt",
+            "email": "benjamin.birt@gmail.com",
+            "github": "BenBirt"
+        }
+    ],
+    "repository": ["github:BenBirt/rules_tofu"],
+    "versions": [],
+    "yanked_versions": {}
+}

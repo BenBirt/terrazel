@@ -242,3 +242,5 @@ module "dns" {
   runner both consume the exec-platform provider binary, so the runtime
   host must match the build host.
 - Windows host support (downloads work; launcher script is bash-only).
+- Generated API docs attached to releases (`starlark_doc_extract` plus a
+  `docs_url` in `.bcr/source.template.json`).

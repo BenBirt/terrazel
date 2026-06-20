@@ -1,0 +1,16 @@
+load("@rules_tofu//tf:defs.bzl", "tf_deploy", "tf_library")
+
+package(default_visibility = ["//visibility:public"])
+
+tf_library(
+    name = "greet_lib",
+    srcs = ["main.tf"],
+)
+
+tf_deploy(
+    name = "smoke",
+    vars = {
+        "name": "bcr",
+    },
+    deps = [":greet_lib"],
+)

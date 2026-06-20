@@ -1,0 +1,52 @@
+name: Release
+
+# Cut a release by pushing a SemVer tag (e.g. `v0.1.0`). The `release` job builds
+# the source tarball (via .github/workflows/release_prep.sh), attaches build
+# attestations, and publishes a GitHub Release.
+#
+# The `publish` job opens the Bazel Central Registry PR automatically, but it is
+# DORMANT until you opt in: set the repository variable `PUBLISH_TO_BCR=true`,
+# add a `BCR_PUBLISH_TOKEN` secret (a *classic* PAT with `repo` + `workflow`
+# scopes — fine-grained PATs cannot open PRs against public repos), and fork
+# bazelbuild/bazel-central-registry to `registry_fork` below. Until then, submit
+# releases to BCR by hand (`bazel run //tools:add_module` in a BCR clone).
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    # Pin to a released ref; check for newer versions periodically.
+    uses: bazel-contrib/.github/.github/workflows/release_ruleset.yaml@v7.7.0
+    with:
+      release_files: rules_tofu-*.tar.gz
+      prerelease: false
+      draft: false
+      tag_name: ${{ inputs.tag_name || github.ref_name }}
+
+  publish:
+    needs: release
+    if: vars.PUBLISH_TO_BCR == 'true'
+    # Pin to a released ref; check for newer versions periodically.
+    uses: bazel-contrib/publish-to-bcr/.github/workflows/publish.yaml@v1.4.1
+    with:
+      tag_name: ${{ inputs.tag_name || github.ref_name }}
+      registry_fork: BenBirt/bazel-central-registry
+      attest: true
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    secrets:
+      publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}

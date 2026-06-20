@@ -258,7 +258,7 @@
     "//tf/providers:extensions.bzl%tf_providers": {
       "general": {
         "bzlTransitiveDigest": "2ap4Ih+gTlPz3Wx9+kiNo8UaapwmFgaRUFUO1JqLuA8=",
-        "usagesDigest": "7YlIVxVP76pqshbGDzBW96b/hUt53jUQqLNWzOkfuik=",
+        "usagesDigest": "ysa5WApiDCsuSL3V903I5Ov3HtsOfypFCDlJGJqDYzI=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "tf_providers_hashicorp_aws": {
