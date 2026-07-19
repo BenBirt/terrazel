@@ -37,6 +37,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Nested Bazel modules (e2e/smoke, tests/integration/broken_workspace)
+      # each carry their own .bazelversion: bazelisk resolves the version from
+      # the nearest MODULE.bazel boundary and never sees the root pin. Keep
+      # every copy identical to the root file.
+      - name: Check .bazelversion files are in sync
+        run: |
+          for f in $(git ls-files '*/.bazelversion'); do
+            if ! cmp -- .bazelversion "$f"; then
+              echo "::error::$f is out of sync with the root .bazelversion. Keep all copies identical to the root file."
+              exit 1
+            fi
+          done
+
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
         with:
