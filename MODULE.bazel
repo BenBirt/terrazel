@@ -1,8 +1,9 @@
 """rules_tofu: Bazel rules for managing OpenTofu/Terraform configuration.
 
-Downstream usage:
+Downstream usage (for the latest version, see
+https://registry.bazel.build/modules/rules_tofu or the GitHub releases page):
 
-    bazel_dep(name = "rules_tofu", version = "0.1.0")
+    bazel_dep(name = "rules_tofu", version = "X.Y.Z")
     tofu = use_extension("@rules_tofu//toolchain:extensions.bzl", "tofu")
     # tofu.version(version = "1.8.5")  # optional override
     use_repo(tofu, "tofu_toolchains")
@@ -10,7 +11,12 @@ Downstream usage:
 
 module(
     name = "rules_tofu",
-    version = "0.1.0",
+    # `version` is deliberately unset: the release tag is the single source of
+    # truth. publish-to-bcr patches the release version into the BCR entry's
+    # MODULE.bazel, and leaving the default here avoids issues when the module
+    # is consumed via non-registry overrides (see
+    # https://github.com/bazel-contrib/rules_go/issues/4380 and the NOTE in
+    # bazel-contrib/rules-template's MODULE.bazel).
 )
 
 bazel_dep(name = "platforms", version = "1.0.0")

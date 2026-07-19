@@ -80,14 +80,18 @@ Releases are driven by SemVer tags and published to the
 [Bazel Central Registry](https://registry.bazel.build/) so downstreams can use
 `bazel_dep(name = "rules_tofu", version = "x.y.z")`.
 
-1. Bump `version` in [`MODULE.bazel`](MODULE.bazel) (and the snippet in
-   [`README.md`](README.md)) to the new `X.Y.Z`. Merge that via a normal PR.
-2. Tag the merge commit `vX.Y.Z` and push the tag.
-3. [`.github/workflows/release.yaml`](.github/workflows/release.yaml) fires: it
+The tag is the **single source of truth** for the version: `version` stays
+unset in `MODULE.bazel` (see the NOTE there), and the BCR entry gets the
+release version patched into its `MODULE.bazel` from the tag. There is nothing
+to bump before tagging.
+
+1. Tag the commit to release as `vX.Y.Z` and push the tag.
+2. [`.github/workflows/release.yaml`](.github/workflows/release.yaml) fires: it
    runs [`release_prep.sh`](.github/workflows/release_prep.sh) to build
    `rules_tofu-vX.Y.Z.tar.gz`, attaches build attestations, and publishes the
-   GitHub Release.
-4. Get the version into the BCR:
+   GitHub Release. The generated release notes include the correct
+   `bazel_dep(...)` snippet for that version.
+3. Get the version into the BCR:
    - **First submission / manual:** clone `bazelbuild/bazel-central-registry`,
      run `bazel run //tools:add_module`, point it at the release tarball and the
      [`.bcr/`](.bcr) templates, and open the PR. A brand-new module's first PR
@@ -99,7 +103,10 @@ Releases are driven by SemVer tags and published to the
 
 Notes:
 
-- Keep `MODULE.bazel`'s `version` equal to the released tag (minus the `v`).
+- Don't add a `version` to `MODULE.bazel`: the automated path relies on
+  publish-to-bcr's version patching, and the manual `add_module` path likewise
+  generates a `module_dot_bazel_version.patch` when the archive's version
+  differs from the one being submitted.
 - Published BCR versions are immutable (add-only) — never edit a shipped version;
   to retract one, yank it via `.bcr/metadata.template.json`.
 - The release tarball excludes `examples/` and `tests/` but **keeps** `e2e/` and

@@ -14,7 +14,9 @@ module(
     version = "0.0.0",
 )
 
-bazel_dep(name = "rules_tofu", version = "0.1.0")
+# Version is irrelevant: `local_path_override` below always wins (same
+# pattern as e2e/smoke).
+bazel_dep(name = "rules_tofu", version = "0.0.0")
 local_path_override(
     module_name = "rules_tofu",
     path = "../../..",
