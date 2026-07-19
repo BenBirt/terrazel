@@ -4,6 +4,8 @@ Public docs are in `README.md`. This file is the agent-specific overlay:
 sandbox bootstrap, hard invariants, repo conventions. Don't add general
 documentation here.
 
+Respond in British English.
+
 ## Build / test in the Anthropic sandbox
 
 `bcr.bazel.build` is not in the proxy allowlist. Before the first build,
@@ -73,7 +75,7 @@ unaffected. Locally, exercise the parts that don't pull in the runner:
 - `tf_library` validates inline — the validate stamp goes in
   `DefaultInfo.files` and `bazel build :foo_lib` is the validation
   contract. Don't add a `:foo.validate` sub-target or a `validate_test`
-  macro flag. `bazel query 'kind("test", //...)'` should only return
+  macro flag. The only test target a `tf_library` generates is
   `:foo.fmt_check`.
 - `_ALLOWED_EXTS` in `library.bzl` / `deploy.bzl` includes `.hcl`, which
   technically permits a user to list `.terraform.lock.hcl` in `srcs`.
@@ -89,6 +91,26 @@ unaffected. Locally, exercise the parts that don't pull in the runner:
   (`materialize`, `materialize_plugin_tree`, `work_tree_root`,
   `PLUGIN_DIR_RELPATH`). Both `library.bzl` and `deploy.bzl` should go
   through them; don't reintroduce inline copies.
+- `module()` in `MODULE.bazel` deliberately has no `version`: the release
+  tag is the single source of truth, and publish-to-bcr (or BCR's
+  `add_module` on the manual path) patches the real version into the
+  registry entry. Don't add a version back, and don't hardcode release
+  versions in README/docstring snippets — use the `X.Y.Z` placeholder
+  plus a registry link.
+- The `.bazelversion` copies (root, `e2e/smoke`,
+  `tests/integration/broken_workspace`) must stay byte-identical: nested
+  modules are separate bazelisk boundaries that never see the root pin.
+  CI's lint job `cmp`s every nested copy against the root; bump them all
+  together.
+- The `--deleted_packages` lines in `.bazelrc` are owned by
+  `bazel run @rules_bazel_integration_test//tools:update_deleted_packages`,
+  which rewrites *every* non-comment `--deleted_packages` line with an
+  auto-discovered list covering all nested workspaces (including
+  `e2e/smoke`). Rerun it after adding/removing nested packages; don't
+  hand-edit the lists or add separate one-off lines.
+- The release tarball (`release_prep.sh`) excludes `examples/` and
+  `tests/` but must keep `e2e/` and `.bcr/` — BCR presubmit reads the
+  test module and templates from the extracted archive.
 
 ## Branch / PR conventions
 
