@@ -5,7 +5,10 @@ real consumer, offline and without credentials.
 
 `local_path_override` points at the repo root so the same module also runs
 locally via `cd e2e/smoke && bazel build //... && bazel test //...`. Under BCR
-presubmit the override is ignored and rules_tofu is fetched from the registry.
+presubmit the override stays active but is equivalent: presubmit vendors the
+module source from the registry entry (release archive + any BCR patches) and
+runs this test module from e2e/smoke *inside* that vendored tree, so `../..`
+resolves to exactly the bits the registry serves.
 """
 
 bazel_dep(name = "rules_tofu", version = "0.0.0")

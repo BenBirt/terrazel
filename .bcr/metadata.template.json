@@ -2,9 +2,9 @@
     "homepage": "https://github.com/BenBirt/rules_tofu",
     "maintainers": [
         {
-            "name": "Ben Birt",
-            "email": "benjamin.birt@gmail.com",
-            "github": "BenBirt"
+            "github": "BenBirt",
+            "github_user_id": 1123120,
+            "email": "benjamin.birt@gmail.com"
         }
     ],
     "repository": ["github:BenBirt/rules_tofu"],
