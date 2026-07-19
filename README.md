@@ -16,10 +16,12 @@ Terraform-compatible) configuration as first-class build targets.
 
 ## Quick start
 
-In your downstream repo's `MODULE.bazel`:
+In your downstream repo's `MODULE.bazel` (for the latest version, see
+[registry.bazel.build/modules/rules_tofu](https://registry.bazel.build/modules/rules_tofu)
+or the release notes, which carry a copy-pasteable snippet):
 
 ```python
-bazel_dep(name = "rules_tofu", version = "0.1.0")
+bazel_dep(name = "rules_tofu", version = "X.Y.Z")
 
 tofu = use_extension("@rules_tofu//toolchain:extensions.bzl", "tofu")
 # tofu.version(version = "1.8.5")  # optional; defaults to a pinned version
@@ -242,3 +244,5 @@ module "dns" {
   runner both consume the exec-platform provider binary, so the runtime
   host must match the build host.
 - Windows host support (downloads work; launcher script is bash-only).
+- Generated API docs attached to releases (`starlark_doc_extract` plus a
+  `docs_url` in `.bcr/source.template.json`).

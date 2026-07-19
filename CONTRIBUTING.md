@@ -30,6 +30,8 @@ bazel test //...
 | `toolchain/` | OpenTofu binary download + toolchain registration |
 | `tests/integration/` | Bazel-in-Bazel negative integration tests |
 | `examples/` | End-to-end usage examples |
+| `e2e/smoke/` | Standalone downstream module; the BCR presubmit test module |
+| `.bcr/` | Bazel Central Registry metadata/source/presubmit templates |
 
 ## Hard invariants
 
@@ -71,3 +73,42 @@ CI enforces this; PRs with formatting violations will fail.
 2. Make your changes and ensure `bazel build //...` and `bazel test //...` both pass.
 3. Run `bazel run @buildifier_prebuilt//:buildifier -- -r .` and commit any formatting changes.
 4. Open a PR against `main` with a clear description of what changed and why.
+
+## Releasing
+
+Releases are driven by SemVer tags and published to the
+[Bazel Central Registry](https://registry.bazel.build/) so downstreams can use
+`bazel_dep(name = "rules_tofu", version = "x.y.z")`.
+
+The tag is the **single source of truth** for the version: `version` stays
+unset in `MODULE.bazel` (see the NOTE there), and the BCR entry gets the
+release version patched into its `MODULE.bazel` from the tag. There is nothing
+to bump before tagging.
+
+1. Tag the commit to release as `vX.Y.Z` and push the tag.
+2. [`.github/workflows/release.yaml`](.github/workflows/release.yaml) fires: it
+   runs [`release_prep.sh`](.github/workflows/release_prep.sh) to build
+   `rules_tofu-vX.Y.Z.tar.gz`, attaches build attestations, and publishes the
+   GitHub Release. The generated release notes include the correct
+   `bazel_dep(...)` snippet for that version.
+3. Get the version into the BCR:
+   - **First submission / manual:** clone `bazelbuild/bazel-central-registry`,
+     run `bazel run //tools:add_module`, point it at the release tarball and the
+     [`.bcr/`](.bcr) templates, and open the PR. A brand-new module's first PR
+     gets extra maintainer review.
+   - **Automated (opt-in):** fork BCR to `BenBirt/bazel-central-registry`, add a
+     classic `BCR_PUBLISH_TOKEN` PAT (`repo` + `workflow` scopes), and set the
+     repository variable `PUBLISH_TO_BCR=true`. The `publish` job then opens the
+     BCR PR automatically on every tag.
+
+Notes:
+
+- Don't add a `version` to `MODULE.bazel`: the automated path relies on
+  publish-to-bcr's version patching, and the manual `add_module` path likewise
+  generates a `module_dot_bazel_version.patch` when the archive's version
+  differs from the one being submitted.
+- Published BCR versions are immutable (add-only) — never edit a shipped version;
+  to retract one, yank it via `.bcr/metadata.template.json`.
+- The release tarball excludes `examples/` and `tests/` but **keeps** `e2e/` and
+  `.bcr/`, which the BCR presubmit reads from the extracted archive. See
+  [`release_prep.sh`](.github/workflows/release_prep.sh).

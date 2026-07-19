@@ -258,7 +258,7 @@
     "//tf/providers:extensions.bzl%tf_providers": {
       "general": {
         "bzlTransitiveDigest": "2ap4Ih+gTlPz3Wx9+kiNo8UaapwmFgaRUFUO1JqLuA8=",
-        "usagesDigest": "7YlIVxVP76pqshbGDzBW96b/hUt53jUQqLNWzOkfuik=",
+        "usagesDigest": "MrX9AjU5f9VOUOKt8bMujbjl9XMhmLugxPj3ogZZQ7w=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "tf_providers_hashicorp_aws": {
@@ -295,7 +295,7 @@
     "//toolchain:extensions.bzl%tofu": {
       "general": {
         "bzlTransitiveDigest": "WmqdvEibLf9RNA5wkgHAD3/TOm73je1YLuFmQHqYUDw=",
-        "usagesDigest": "CjW86UdZEo8LkSe7QkaoBsJSpRELuBlgpdDlQwIXOHs=",
+        "usagesDigest": "t7Le92B4UKQl5FO1pD5yrrBvuMZcsenEUz4JS4PUYwE=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "tofu_linux_amd64": {
@@ -388,7 +388,7 @@
     "@@rules_bazel_integration_test+//:extensions.bzl%bazel_binaries": {
       "general": {
         "bzlTransitiveDigest": "XC9nqZ31LIbq8N7cEK+rYa2iXNQLcJ3cyGWw+zPZlc0=",
-        "usagesDigest": "q/121CveC2OnHywTTAHVNL7nvBUVWzwBt88UDXMD/CM=",
+        "usagesDigest": "ZwjzAMH8dZBuH9aetctbApqCu8x32sdt9q3lTEvRVY8=",
         "recordedInputs": [
           "REPO_MAPPING:rules_bazel_integration_test+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_bazel_integration_test+,cgrindel_bazel_starlib cgrindel_bazel_starlib+"
