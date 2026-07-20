@@ -16,8 +16,8 @@ The macro always emits:
   - `:<name>.destroy` — runnable: `bazel run :<name>.destroy`
   - `:<name>.fmt`     — runnable: `bazel run :<name>.fmt`
 
-When enabled (default):
-  - `:<name>.fmt_check`  — test: `bazel test :<name>.fmt_check` (fmt_test=True)
+When `fmt_test=True` (the default) and `srcs` is non-empty:
+  - `:<name>.fmt_check`  — test: `bazel test :<name>.fmt_check`
 
 Materialization happens at analysis time via `ctx.actions.symlink` (one
 action per file). At runtime the runner cd's into the work tree and
@@ -33,13 +33,12 @@ load(":runner.bzl", _tf_runner = "tf_runner")
 load(":var_files_check.bzl", "DUPCHECK_BIN", _tf_check_var_files = "tf_check_var_files")
 load(
     ":work_tree.bzl",
+    "ALLOWED_SRC_EXTS",
     "PLUGIN_DIR_RELPATH",
     _materialize = "materialize",
     _materialize_plugin_tree = "materialize_plugin_tree",
     _work_tree_root = "work_tree_root",
 )
-
-_ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
 def _tf_deploy_impl(ctx):
     direct = [struct(path = f.short_path, file = f) for f in ctx.files.srcs + ctx.files.data]
@@ -48,7 +47,7 @@ def _tf_deploy_impl(ctx):
     entries = depset(direct = direct + var_file_entries, transitive = transitive).to_list()
 
     tfvars_content = json.encode_indent(
-        {k: v for k, v in ctx.attr.vars.items()},
+        ctx.attr.vars,
         indent = "  ",
     )
 
@@ -64,9 +63,6 @@ def _tf_deploy_impl(ctx):
     plugin_outputs = _materialize_plugin_tree(ctx, providers_depset)
     outputs = outputs + plugin_outputs
 
-    # The work tree root is the parent dir of every output. We expose
-    # the first output as `work_tree`; the runner derives the root from
-    # it via dirname-walking up to `<name>.work/`.
     work_tree_files = depset(direct = outputs)
 
     validate_stamp = _tf_init_validate(
@@ -90,7 +86,6 @@ def _tf_deploy_impl(ctx):
     return [
         DefaultInfo(files = depset(direct = default_files, transitive = [work_tree_files])),
         TfDeployInfo(
-            work_tree = outputs[0],
             work_tree_files = work_tree_files,
             package_dir = ctx.label.package,
             var_file_relpaths = [f.short_path for f in ctx.files.var_files],
@@ -102,7 +97,7 @@ tf_deploy_rule = rule(
     implementation = _tf_deploy_impl,
     attrs = {
         "srcs": attr.label_list(
-            allow_files = _ALLOWED_EXTS,
+            allow_files = ALLOWED_SRC_EXTS,
             doc = "Optional deploy-local config files (e.g. provider/backend setup).",
         ),
         "deps": attr.label_list(
@@ -152,8 +147,8 @@ def tf_deploy(name, srcs = None, deps = None, vars = None, var_files = None, dat
       - `:<name>.destroy` — `bazel run` to destroy all managed resources.
       - `:<name>.fmt`     — `bazel run` to reformat .tf files in-place.
 
-    When enabled (default True):
-      - `:<name>.fmt_check` — `bazel test` that fails if files are not formatted (fmt_test=True).
+    When `fmt_test=True` (the default) and `srcs` is non-empty:
+      - `:<name>.fmt_check` — `bazel test` that fails if files are not formatted.
 
     Args:
       name: target name.
@@ -171,7 +166,8 @@ def tf_deploy(name, srcs = None, deps = None, vars = None, var_files = None, dat
           level. Unioned with providers transitively contributed by `deps`. The exec
           platform binary is symlinked into the work tree's plugin dir; `tofu init`
           runs offline against it.
-      fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
+      fmt_test: whether to emit a `:<name>.fmt_check` test target. Only emitted
+          when True (the default) and `srcs` is non-empty.
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -211,9 +207,10 @@ def tf_deploy(name, srcs = None, deps = None, vars = None, var_files = None, dat
         **common_kwargs
     )
 
-    _tf_fmt(name = name + ".fmt")
-    if fmt_test:
+    _tf_fmt(name = name + ".fmt", **common_kwargs)
+    if fmt_test and srcs:
         _tf_fmt_check(
             name = name + ".fmt_check",
-            srcs = srcs or [],
+            srcs = srcs,
+            **common_kwargs
         )

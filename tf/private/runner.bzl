@@ -9,20 +9,9 @@ runner itself, no runfiles boilerplate in bash.
 
 load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 load(":providers.bzl", "TfDeployInfo")
+load(":work_tree.bzl", "runfiles_path")
 
 _RUNNER_BIN_LABEL = "//tf/private/cmd/runner:runner"
-
-def _runfiles_path(workspace_name, f):
-    """Return the path at which `f` appears in a runfiles tree.
-
-    Convention:
-      - Main-repo files: `<workspace_name>/<short_path>`.
-      - External-repo files: `<short_path>` with the leading `../` stripped.
-    """
-    sp = f.short_path
-    if sp.startswith("../"):
-        return sp[3:]
-    return workspace_name + "/" + sp
 
 def _tf_runner_impl(ctx):
     deploy = ctx.attr.deploy[TfDeployInfo]
@@ -30,8 +19,8 @@ def _tf_runner_impl(ctx):
     runner_bin = ctx.attr._runner_bin[DefaultInfo].files_to_run.executable
     workspace_name = ctx.workspace_name or "_main"
 
-    runner_rel = _runfiles_path(workspace_name, runner_bin)
-    tofu_rel = _runfiles_path(workspace_name, tofu.binary)
+    runner_rel = runfiles_path(workspace_name, runner_bin)
+    tofu_rel = runfiles_path(workspace_name, tofu.binary)
 
     # The work tree root in runfiles is `<workspace>/<pkg>/<name>.work`,
     # because the deploy's outputs are declared at

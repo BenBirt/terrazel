@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/hashicorp/hcl/v2/hclparse"
 )
 
 // stringList is a repeatable string flag (e.g. --var-file can appear multiple times).
@@ -70,13 +70,15 @@ func main() {
 func run() error {
 	extraArgs := flag.Args()
 
+	// --package-dir is deliberately absent: an empty value is valid and means
+	// the deploy lives in the workspace root package, so the work tree root
+	// itself is the cwd.
 	for name, value := range map[string]string{
-		"--tofu":        *tofu,
-		"--work-tree":   *workTree,
-		"--package-dir": *packageDir,
-		"--command":     *command,
-		"--state-dir":   *stateDir,
-		"--plugin-dir":  *pluginDir,
+		"--tofu":       *tofu,
+		"--work-tree":  *workTree,
+		"--command":    *command,
+		"--state-dir":  *stateDir,
+		"--plugin-dir": *pluginDir,
 	} {
 		if value == "" {
 			return fmt.Errorf("%s is required", name)
@@ -167,11 +169,31 @@ func runTofu(env []string, cwd string, args ...string) error {
 	return cmd.Run()
 }
 
-// hasBackend reports whether any .tf file in the deploy's package directory
-// declares a `backend "..." {}` or `cloud {}` block nested inside a top-level
-// `terraform {}` block. Either construct means the workspace uses a remote/cloud
-// state backend, and local -state/-state-out flags should be omitted from the
-// runner invocation.
+// terraformBlockSchema matches top-level `terraform {}` blocks; backendBlockSchema
+// matches the `backend "type" {}` and `cloud {}` blocks nested within one. Both
+// are used with schema-based PartialContent, which decodes native (.tf) and JSON
+// (.tf.json) syntax uniformly and ignores every other construct.
+var (
+	terraformBlockSchema = &hcl.BodySchema{
+		Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}},
+	}
+	backendBlockSchema = &hcl.BodySchema{
+		Blocks: []hcl.BlockHeaderSchema{
+			{Type: "backend", LabelNames: []string{"type"}},
+			{Type: "cloud"},
+		},
+	}
+)
+
+// hasBackend reports whether any .tf or .tf.json file in the deploy's package
+// directory declares a `backend "..." {}` or `cloud {}` block nested inside a
+// top-level `terraform {}` block. Either construct means the workspace uses a
+// remote/cloud state backend, and local -state/-state-out flags should be
+// omitted from the runner invocation.
+//
+// A file that fails to parse is treated as backend-less. The build-time validate
+// action already guarantees well-formed files at runtime, so a parse error here
+// must not crash the runner.
 //
 // Only the package directory (cwd) is scanned — not the full work tree. This is
 // intentional: Terraform reads backend configuration from the root module only,
@@ -184,38 +206,49 @@ func hasBackend(cwd string) bool {
 	if err != nil {
 		return false
 	}
+	parser := hclparse.NewParser()
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".tf" {
+		if e.IsDir() {
 			continue
 		}
-		path := filepath.Join(cwd, e.Name())
-		b, err := os.ReadFile(path)
+		name := e.Name()
+		isJSON := strings.HasSuffix(name, ".tf.json")
+		if !isJSON && filepath.Ext(name) != ".tf" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(cwd, name))
 		if err != nil {
 			continue
 		}
-		if containsBackendBlock(b, path) {
+		var file *hcl.File
+		var diags hcl.Diagnostics
+		if isJSON {
+			file, diags = parser.ParseJSON(b, name)
+		} else {
+			file, diags = parser.ParseHCL(b, name)
+		}
+		if diags.HasErrors() {
+			continue
+		}
+		if containsBackendBlock(file) {
 			return true
 		}
 	}
 	return false
 }
 
-func containsBackendBlock(b []byte, filename string) bool {
-	file, diags := hclsyntax.ParseConfig(b, filename, hcl.InitialPos)
+func containsBackendBlock(file *hcl.File) bool {
+	content, _, diags := file.Body.PartialContent(terraformBlockSchema)
 	if diags.HasErrors() {
 		return false
 	}
-	body, ok := file.Body.(*hclsyntax.Body)
-	if !ok {
-		return false
-	}
-	for _, block := range body.Blocks {
-		if block.Type == "terraform" {
-			for _, nestedBlock := range block.Body.Blocks {
-				if nestedBlock.Type == "backend" || nestedBlock.Type == "cloud" {
-					return true
-				}
-			}
+	for _, block := range content.Blocks {
+		inner, _, diags := block.Body.PartialContent(backendBlockSchema)
+		if diags.HasErrors() {
+			continue
+		}
+		if len(inner.Blocks) > 0 {
+			return true
 		}
 	}
 	return false

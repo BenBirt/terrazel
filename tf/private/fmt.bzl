@@ -5,17 +5,12 @@ parameter on `tf_library` or `tf_deploy` instead.
 """
 
 load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
-
-def _runfiles_path(workspace_name, f):
-    sp = f.short_path
-    if sp.startswith("../"):
-        return sp[3:]
-    return workspace_name + "/" + sp
+load(":work_tree.bzl", "ALLOWED_SRC_EXTS", "runfiles_path")
 
 def _tf_fmt_impl(ctx):
     tofu = ctx.toolchains[TOOLCHAIN_TYPE].tofu
     workspace_name = ctx.workspace_name or "_main"
-    tofu_rel = _runfiles_path(workspace_name, tofu.binary)
+    tofu_rel = runfiles_path(workspace_name, tofu.binary)
 
     out = ctx.actions.declare_file(ctx.label.name + ".sh")
     ctx.actions.write(
@@ -44,7 +39,7 @@ tf_fmt = rule(
 def _tf_fmt_check_impl(ctx):
     tofu = ctx.toolchains[TOOLCHAIN_TYPE].tofu
     workspace_name = ctx.workspace_name or "_main"
-    tofu_rel = _runfiles_path(workspace_name, tofu.binary)
+    tofu_rel = runfiles_path(workspace_name, tofu.binary)
 
     out = ctx.actions.declare_file(ctx.label.name + ".sh")
     ctx.actions.write(
@@ -69,8 +64,9 @@ tf_fmt_check_test = rule(
     test = True,
     attrs = {
         "srcs": attr.label_list(
-            allow_files = [".tf", ".tf.json"],
-            doc = "Source files to check; included as runfiles so the test sees them.",
+            allow_files = ALLOWED_SRC_EXTS,
+            doc = "Source files to check; included as runfiles so the test sees them. " +
+                  "`tofu fmt -check` only inspects .tf files; other extensions are harmless runfiles.",
         ),
     },
     toolchains = [TOOLCHAIN_TYPE],

@@ -4,8 +4,9 @@ These providers are the typed channel by which the dep graph composes:
 the `tf_library` rule emits a `TfLibraryInfo` carrying its
 own files plus its transitive deps' files; downstream libraries and the
 root `tf_deploy` consume it to assemble the full input set, and
-the runner rule reads `TfDeployInfo` to learn where the
-materialized working tree lives and which directory to cd into.
+the runner rule reads `TfDeployInfo` for the deploy's runfiles set,
+its package directory, var-file paths, and plugin-dir relpath — the
+inputs it needs to invoke `tofu` against the materialized work tree.
 """
 
 visibility(["public"])
@@ -42,7 +43,6 @@ TfLibraryInfo = provider(
 TfDeployInfo = provider(
     doc = "Carries everything a runner needs to execute `tofu` against a root deploy.",
     fields = {
-        "work_tree": "File: the materialized work tree root (a directory of symlinks + generated tfvars).",
         "work_tree_files": "depset[File]: every file inside the work tree (so runfiles include them).",
         "package_dir": "string: workspace-relative directory the runner cd's into before running tofu.",
         "var_file_relpaths": "list[string]: workspace-relative paths of -var-file inputs, in declaration order.",
