@@ -19,6 +19,25 @@ load("//toolchain:toolchain.bzl", "TOOLCHAIN_TYPE")
 # `<host>/<namespace>/<name>/<version>/<os>_<arch>/<binary>`.
 PLUGIN_DIR_RELPATH = ".rules_tofu-plugins"
 
+# Only structural Terraform inputs are allowed in a rule's srcs. Variable
+# values come from `tf_deploy(vars = {...})`; allowing `.tfvars[.json]`
+# here would create ambiguous precedence with the deploy-emitted
+# `rules_tofu.auto.tfvars.json` and lets a reusable module declare values
+# it has no business owning.
+ALLOWED_SRC_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
+
+def runfiles_path(workspace_name, f):
+    """Return the path at which `f` appears in a runfiles tree.
+
+    Convention:
+      - Main-repo files: `<workspace_name>/<short_path>`.
+      - External-repo files: `<short_path>` with the leading `../` stripped.
+    """
+    sp = f.short_path
+    if sp.startswith("../"):
+        return sp[3:]
+    return workspace_name + "/" + sp
+
 def materialize(ctx, entries, tfvars_content = None):
     """Materialize a work tree under `<pkg>/<name>.work/`.
 
@@ -33,9 +52,8 @@ def materialize(ctx, entries, tfvars_content = None):
           (which carry no variable values).
 
     Returns:
-      (list[File], string): the declared outputs and the workspace-relative
-      package dir (i.e. `ctx.label.package`) that the caller will pass to
-      `tf_init_validate` as the cwd.
+      list[File]: the declared work-tree outputs (symlinks plus, when
+      `tfvars_content` is set, the generated tfvars file).
     """
     work_prefix = ctx.label.name + ".work"
     outputs = []

@@ -25,10 +25,21 @@ jobs:
       - name: Test
         run: bazel test //... --test_output=errors --verbose_failures
 
+      # e2e/smoke is the BCR presubmit test module and models the README-shaped
+      # consumer path. It's excluded from //... via --deleted_packages, so build
+      # it explicitly here to catch consumer-facing breakage before a release.
+      - name: Build and test e2e/smoke consumer module
+        run: |
+          cd e2e/smoke
+          bazel build //...
+          bazel test //... --test_output=errors
+
       - name: Check for uncommitted changes
         run: |
-          if ! git diff --exit-code; then
+          changes=$(git status --porcelain)
+          if [ -n "$changes" ]; then
             echo "::error::Uncommitted changes detected after build/test (e.g. MODULE.bazel.lock). Please run the failing commands locally and commit the updated files."
+            echo "$changes"
             exit 1
           fi
 

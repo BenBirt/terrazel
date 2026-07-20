@@ -225,9 +225,10 @@ module "dns" {
   — variable values must come through `tf_deploy(vars = {...})`
   or `tf_deploy(var_files = [...])`, not via files committed in
   libraries.
-- `var_files` accepts only `.tfvars.json` (JSON format). This restriction
-  enables complete duplicate-key detection without an HCL parser. If you
-  need `.tfvars` (HCL) input, convert it to JSON in a `genrule` first.
+- `var_files` accepts both `.tfvars.json` (JSON) and `.tfvars` (HCL)
+  files. Duplicate-key detection covers both formats: the JSON files are
+  scanned directly and the HCL files are parsed to catch overlapping keys
+  across `vars` and every `var_files` entry.
 - Variable keys must be unique across `vars` and all `var_files` entries.
   A dedicated `bazel build` action checks this and fails on any overlap.
 - Files from external Bazel modules cannot be included in a deploy: the

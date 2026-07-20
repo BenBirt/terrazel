@@ -15,18 +15,12 @@ load(":init_action.bzl", _tf_init_validate = "tf_init_validate")
 load(":providers.bzl", "TfLibraryInfo", "TfProviderInfo")
 load(
     ":work_tree.bzl",
+    "ALLOWED_SRC_EXTS",
     "PLUGIN_DIR_RELPATH",
     _materialize = "materialize",
     _materialize_plugin_tree = "materialize_plugin_tree",
     _work_tree_root = "work_tree_root",
 )
-
-# Only structural Terraform inputs are allowed in srcs. Variable values
-# come from `tf_deploy(vars = {...})`; allowing `.tfvars[.json]`
-# here would create ambiguous precedence with the deploy-emitted
-# `rules_tofu.auto.tfvars.json` and lets a reusable module declare values
-# it has no business owning.
-_ALLOWED_EXTS = [".tf", ".tf.json", ".tftpl", ".hcl"]
 
 def _tf_library_impl(ctx):
     direct = [
@@ -74,7 +68,7 @@ _tf_library = rule(
     implementation = _tf_library_impl,
     attrs = {
         "srcs": attr.label_list(
-            allow_files = _ALLOWED_EXTS,
+            allow_files = ALLOWED_SRC_EXTS,
             doc = "Source files belonging to this library (.tf, .tf.json, .tftpl, .hcl).",
         ),
         "deps": attr.label_list(
@@ -125,8 +119,8 @@ def tf_library(name, srcs = None, deps = None, data = None, providers = None, fm
                         the library's transitive files.
       - `:<name>.fmt` — `bazel run` to reformat .tf files in-place.
 
-    When enabled (default True):
-      - `:<name>.fmt_check`  — `bazel test` that fails if files are not formatted (fmt_test=True).
+    When `fmt_test=True` (the default) and `srcs` is non-empty:
+      - `:<name>.fmt_check`  — `bazel test` that fails if files are not formatted.
 
     Args:
       name: target name.
@@ -137,7 +131,8 @@ def tf_library(name, srcs = None, deps = None, data = None, providers = None, fm
           by `tf_providers.provider(...)` in MODULE.bazel) that this library
           references in `required_providers`. Propagates transitively to any
           `tf_deploy` consuming this library.
-      fmt_test: whether to emit a `:<name>.fmt_check` test target (default True).
+      fmt_test: whether to emit a `:<name>.fmt_check` test target. Only emitted
+          when True (the default) and `srcs` is non-empty.
       **kwargs: forwarded to the underlying rule (visibility, tags, testonly).
     """
     common_kwargs = {}
@@ -154,9 +149,10 @@ def tf_library(name, srcs = None, deps = None, data = None, providers = None, fm
         **dict(common_kwargs, **kwargs)
     )
 
-    _tf_fmt(name = name + ".fmt")
-    if fmt_test:
+    _tf_fmt(name = name + ".fmt", **common_kwargs)
+    if fmt_test and srcs:
         _tf_fmt_check(
             name = name + ".fmt_check",
-            srcs = srcs or [],
+            srcs = srcs,
+            **common_kwargs
         )

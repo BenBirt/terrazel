@@ -100,6 +100,18 @@ func setup(t *testing.T, vars map[string]any) (
 	invocations func() []invocation,
 ) {
 	t.Helper()
+	return setupPkg(t, vars, "mypkg")
+}
+
+// setupPkg is like setup but places the deploy at the given workspace-relative
+// package directory. An empty pkgDir models a deploy in the workspace root
+// package, where the work tree root itself is the cwd.
+func setupPkg(t *testing.T, vars map[string]any, pkgDir string) (
+	cmd *exec.Cmd,
+	addVarFile func(map[string]any) string,
+	invocations func() []invocation,
+) {
+	t.Helper()
 	bin := runnerBin(t)
 	dir := t.TempDir()
 
@@ -113,7 +125,6 @@ func setup(t *testing.T, vars map[string]any) (
 	}
 
 	workTree := filepath.Join(dir, "work")
-	const pkgDir = "mypkg"
 	if err := os.MkdirAll(filepath.Join(workTree, pkgDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -428,6 +439,92 @@ terraform {
 	}
 }
 
+// writePkgFile writes a file with the given basename and content into the
+// package directory of the work tree.
+func writePkgFile(t *testing.T, cmd *exec.Cmd, name, content string) {
+	t.Helper()
+	var workTree string
+	for _, arg := range cmd.Args {
+		if strings.HasPrefix(arg, "--work-tree=") {
+			workTree = strings.TrimPrefix(arg, "--work-tree=")
+		}
+	}
+	if workTree == "" {
+		t.Fatal("could not find --work-tree flag in runner cmd args")
+	}
+	path := filepath.Join(workTree, "mypkg", name)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRunner_BackendBlock_JSON_OmitsStateFlags verifies that a backend block
+// declared in Terraform JSON syntax (.tf.json) is recognised, so the runner
+// omits -state= / -state-out= just as it does for native .tf syntax.
+func TestRunner_BackendBlock_JSON_OmitsStateFlags(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	writePkgFile(t, cmd, "backend.tf.json", `{"terraform": {"backend": {"s3": {}}}}`)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	if plan.hasArgWithPrefix("-state=") {
+		t.Errorf("plan invocation should not have -state= when .tf.json backend block present, got args: %v", plan.args)
+	}
+	if plan.hasArgWithPrefix("-state-out=") {
+		t.Errorf("plan invocation should not have -state-out= when .tf.json backend block present, got args: %v", plan.args)
+	}
+}
+
+// TestRunner_NoBackendBlock_JSON_KeepsStateFlags verifies that a .tf.json file
+// with a terraform block but no backend/cloud block does not suppress the local
+// -state= / -state-out= flags.
+func TestRunner_NoBackendBlock_JSON_KeepsStateFlags(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	writePkgFile(t, cmd, "main.tf.json", `{"terraform": {"required_version": ">= 1.0"}}`)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	if !plan.hasArgWithPrefix("-state=") {
+		t.Errorf("plan invocation should have -state= when .tf.json has no backend block, got args: %v", plan.args)
+	}
+	if !plan.hasArgWithPrefix("-state-out=") {
+		t.Errorf("plan invocation should have -state-out= when .tf.json has no backend block, got args: %v", plan.args)
+	}
+}
+
+// TestRunner_MalformedJSON_KeepsStateFlags verifies that an unparseable .tf.json
+// file is treated as backend-less: the runner keeps the local -state= /
+// -state-out= flags and does not crash. Build-time validate guarantees
+// well-formed files at runtime, so this is a defensive backstop only.
+func TestRunner_MalformedJSON_KeepsStateFlags(t *testing.T) {
+	cmd, _, invocations := setup(t, map[string]any{"region": "us-east-1"})
+	writePkgFile(t, cmd, "broken.tf.json", `{"terraform": {`)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly with malformed .tf.json present: %v\n%s", err, out)
+	}
+	invs := invocations()
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	plan := invs[1]
+	if !plan.hasArgWithPrefix("-state=") {
+		t.Errorf("plan invocation should have -state= when .tf.json is malformed, got args: %v", plan.args)
+	}
+	if !plan.hasArgWithPrefix("-state-out=") {
+		t.Errorf("plan invocation should have -state-out= when .tf.json is malformed, got args: %v", plan.args)
+	}
+}
+
 // TestRunner_MissingBuildWorkspaceDirectory verifies that the runner exits
 // non-zero and prints an actionable message when BUILD_WORKSPACE_DIRECTORY
 // is not set (i.e. it was invoked outside of `bazel run`).
@@ -457,7 +554,6 @@ func TestRunner_MissingRequiredFlags(t *testing.T) {
 	requiredFlags := []string{
 		"--tofu",
 		"--work-tree",
-		"--package-dir",
 		"--command",
 		"--state-dir",
 		"--plugin-dir",
@@ -552,5 +648,53 @@ terraform {
 	}
 	if !plan.hasArgWithPrefix("-state-out=") {
 		t.Errorf("plan invocation should have -state-out= when backend is only in sibling dir, got args: %v", plan.args)
+	}
+}
+
+// TestRunner_EmptyPackageDir_RunsAtWorkTreeRoot verifies that an empty
+// --package-dir is valid: it models a deploy in the workspace root package, so
+// tofu runs with the work tree root itself as its cwd. (The BCR test module
+// e2e/smoke has exactly this shape.)
+func TestRunner_EmptyPackageDir_RunsAtWorkTreeRoot(t *testing.T) {
+	cmd, _, invocations := setupPkg(t, map[string]any{"region": "us-east-1"}, "")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runner failed unexpectedly with empty --package-dir: %v\n%s", err, out)
+	}
+	invs := invocations()
+	// Expect: init, plan.
+	if len(invs) != 2 {
+		t.Fatalf("expected 2 tofu invocations (init, plan), got %d: %+v", len(invs), invs)
+	}
+	if !invs[0].hasArg("init") {
+		t.Errorf("first invocation should be 'init', got args: %v", invs[0].args)
+	}
+	if !invs[1].hasArg("plan") {
+		t.Errorf("second invocation should be 'plan', got args: %v", invs[1].args)
+	}
+
+	var workTree string
+	for _, arg := range cmd.Args {
+		if strings.HasPrefix(arg, "--work-tree=") {
+			workTree = strings.TrimPrefix(arg, "--work-tree=")
+		}
+	}
+	if workTree == "" {
+		t.Fatal("could not find --work-tree flag in runner cmd args")
+	}
+	// The recorded cwd must be the work tree root itself, not a package
+	// subdirectory. Resolve symlinks on both sides: the fake tofu records the
+	// physical path, while --work-tree carries the logical path.
+	wantCwd, err := filepath.EvalSymlinks(workTree)
+	if err != nil {
+		t.Fatalf("resolve work tree root: %v", err)
+	}
+	for _, inv := range invs {
+		gotCwd, err := filepath.EvalSymlinks(inv.cwd)
+		if err != nil {
+			t.Fatalf("resolve recorded cwd %q: %v", inv.cwd, err)
+		}
+		if gotCwd != wantCwd {
+			t.Errorf("tofu cwd = %q, want work tree root %q", gotCwd, wantCwd)
+		}
 	}
 }

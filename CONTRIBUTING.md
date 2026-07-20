@@ -22,7 +22,7 @@ bazel test //...
 
 | Path | Purpose |
 |------|---------|
-| `tf/` | Public rules (`tf_library`, `tf_deploy`, `tf_fmt`) |
+| `tf/` | Public rules (`tf_library`, `tf_deploy`) |
 | `tf/providers/` | `tf_providers` Bzlmod extension |
 | `tf/private/` | Internal rule implementations |
 | `tf/private/cmd/runner/` | Go binary: wraps `tofu` at runtime |
@@ -51,8 +51,11 @@ bazel test //tf/private/cmd/...
 # Integration tests (Bazel-in-Bazel, slower):
 bazel test //tests/integration/...
 
-# Format check:
-bazel test //... --test_tag_filters=fmt
+# Format checks (fmt_check tests) run as part of the full suite:
+bazel test //...
+
+# To target a single target's format check, use its `:<name>.fmt_check` label:
+bazel test //examples/hello:greet_lib.fmt_check
 ```
 
 ## Starlark formatting
